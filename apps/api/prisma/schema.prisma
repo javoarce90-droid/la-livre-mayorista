@@ -11,4 +11,162 @@ datasource db {
   provider = "postgresql"
 }
 
-// The catalog model (books, publishers, prices, stock...) will be added later.
+// ---------------------------------------------------------------------------
+// Catalog
+//
+// ONIX code-list values (product form, contributor role, availability...) are
+// stored as raw codes so new codes never require a migration. Human-readable
+// labels are mapped in application code.
+// ---------------------------------------------------------------------------
+
+/// A distributor that sends us an ONIX feed (e.g. Azeta, Celesa).
+model Supplier {
+  id   Int    @id @default(autoincrement())
+  /// Stable internal code, e.g. "AZETA".
+  code String @unique @db.VarChar(32)
+  name String
+
+  /// Discount the supplier gives on the list price excluding tax (e.g. 17.00).
+  /// Used to derive the net cost when the feed does not carry it.
+  listPriceDiscountPercent Decimal? @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  publishers Publisher[]
+  offers     SupplierOffer[]
+}
+
+/// Publisher as identified by a supplier (ONIX PublisherIdentifier).
+model Publisher {
+  id         Int    @id @default(autoincrement())
+  supplierId Int
+  /// Supplier-specific publisher code, e.g. "Z98" in the Azeta feed.
+  code       String @db.VarChar(32)
+  name       String
+
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+  books    Book[]
+
+  @@unique([supplierId, code])
+}
+
+/// A book, identified by its ISBN-13. Supplier-independent.
+model Book {
+  id     Int    @id @default(autoincrement())
+  /// ISBN-13 kept as text to preserve leading zeros and format.
+  isbn13 String @unique @db.VarChar(13)
+  title  String
+
+  publisherId      Int?
+  imprintName      String?
+  /// ONIX List 150 (e.g. "BC" paperback, "BB" hardback).
+  productForm      String?   @db.VarChar(2)
+  /// ISO 639-2/B language code (e.g. "spa", "cat").
+  languageCode     String?   @db.VarChar(3)
+  pageCount        Int?
+  heightMm         Int?
+  widthMm          Int?
+  weightGrams      Int?
+  /// ONIX List 64.
+  publishingStatus String?   @db.VarChar(2)
+  publishedOn      DateTime? @db.Date
+  description      String?
+  coverUrl         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  publisher    Publisher?        @relation(fields: [publisherId], references: [id])
+  contributors BookContributor[]
+  offers       SupplierOffer[]
+
+  @@index([publisherId])
+}
+
+/// Author, translator, illustrator... ONIX contributors carry no stable ID,
+/// so they are stored by name per book instead of as shared entities.
+model BookContributor {
+  id       Int    @id @default(autoincrement())
+  bookId   Int
+  sequence Int
+  /// ONIX List 17 (e.g. "A01" author, "B06" translator, "A12" illustrator).
+  roleCode String @db.VarChar(3)
+  name     String
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([bookId, sequence])
+}
+
+/// What a supplier offers for a book: availability and prices from its feed.
+model SupplierOffer {
+  id         Int @id @default(autoincrement())
+  bookId     Int
+  supplierId Int
+
+  /// ONIX RecordReference, unique within the supplier feed.
+  recordReference   String  @db.VarChar(100)
+  /// Supplier's own product identifier, when different from the ISBN.
+  supplierProductId String? @db.VarChar(100)
+
+  /// ONIX List 65 (e.g. "20" available, "40" not available, "10" not yet).
+  availabilityCode String    @db.VarChar(2)
+  /// Expected availability date, only when the feed reports it.
+  availableFrom    DateTime? @db.Date
+
+  /// List prices as sent by the supplier, in `currencyCode`.
+  currencyCode           String   @db.Char(3)
+  /// ONIX PriceType 01: recommended retail price excluding tax.
+  listPriceExcludingTax  Decimal? @db.Decimal(10, 2)
+  /// ONIX PriceType 02: recommended retail price including tax.
+  listPriceIncludingTax  Decimal? @db.Decimal(10, 2)
+  /// ONIX PriceType 03: fixed retail price excluding tax.
+  fixedPriceExcludingTax Decimal? @db.Decimal(10, 2)
+  taxRatePercent         Decimal? @db.Decimal(5, 2)
+
+  /// Real net purchase cost, only when a source provides it explicitly.
+  /// When null, the cost is derived from the list price and the supplier discount.
+  netCostAmount    Decimal? @db.Decimal(10, 2)
+  /// ONIX price type the net cost comes from (e.g. "05").
+  netCostPriceType String?  @db.VarChar(2)
+
+  /// Manual La Livre sale price that overrides the pricing rule.
+  salePriceOverride Decimal? @db.Decimal(10, 2)
+
+  /// ONIX Header SentDateTime of the feed that last updated this offer.
+  sourceSentAt DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  book     Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@unique([supplierId, recordReference])
+  @@unique([supplierId, bookId])
+  @@index([bookId])
+}
+
+// ---------------------------------------------------------------------------
+// Pricing
+// ---------------------------------------------------------------------------
+
+enum PricingBasis {
+  /// sale = cost × (1 + percent / 100)
+  MARKUP_ON_COST
+  /// sale = cost / (1 - percent / 100)
+  MARGIN_ON_PRICE
+}
+
+/// Configurable pricing rule. Sale prices are computed at read time, so
+/// changing the rule never requires code changes or catalog migrations.
+model PricingRule {
+  id       Int          @id @default(autoincrement())
+  name     String       @unique @db.VarChar(64)
+  basis    PricingBasis
+  percent  Decimal      @db.Decimal(5, 2)
+  isActive Boolean      @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
