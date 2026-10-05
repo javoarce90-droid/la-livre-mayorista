@@ -1,0 +1,14 @@
+// Prisma schema for La Livre.
+// The connection URL is configured in prisma.config.ts (Prisma 7), not here.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// The catalog model (books, publishers, prices, stock...) will be added later.

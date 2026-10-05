@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+
+# pnpm 11 blocks dependency build scripts unless explicitly allowed.
+allowBuilds:
+  '@prisma/engines': true
+  prisma: true
+  sharp: false
+  unrs-resolver: false

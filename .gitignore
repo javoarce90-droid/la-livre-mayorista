@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Generated Prisma client
+apps/api/src/generated/
+
+# Test coverage
+coverage/
+
+# Environment files (only the example is tracked)
+.env
+.env.*
+!.env.example
+
+# Deployment / tooling
+.vercel/
+
+# OS / editor / logs
+.DS_Store
+*.pem
+*.log

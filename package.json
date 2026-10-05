@@ -1,0 +1,23 @@
+{
+  "name": "la-livre",
+  "version": "0.0.0",
+  "private": true,
+  "description": "La Livre: wholesale book catalog (monorepo)",
+  "packageManager": "pnpm@11.5.2",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @la-livre/web --filter @la-livre/api dev",
+    "dev:web": "pnpm --filter @la-livre/web dev",
+    "dev:api": "pnpm --filter @la-livre/api dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --if-present test",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "db:generate": "pnpm --filter @la-livre/api db:generate",
+    "db:migrate": "pnpm --filter @la-livre/api db:migrate",
+    "db:deploy": "pnpm --filter @la-livre/api db:deploy"
+  }
+}
