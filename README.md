@@ -91,9 +91,38 @@ pnpm import:onix -- --file ~/Escritorio/Azeta_Catalogo_ONIX.zip --limit 1000 --i
 
 Con `--include-publisher` hay que recorrer el archivo entero (~1,1 millones de productos, alrededor de un minuto); con solo `--limit` la lectura se detiene al alcanzar el límite. Volver a importar es idempotente: actualiza libros y ofertas, reemplaza los colaboradores y nunca sobrescribe el descuento del proveedor, las reglas de precio existentes, el coste neto ni el precio de venta manual.
 
+## Front: portal de clientes
+
+Primera pasada del portal para librerías en `apps/web` (Next.js 16, Tailwind CSS v4). **Todo está mockeado**: no hay conexión con la API ni con la base de datos todavía.
+
+**Credenciales demo** (se muestran en el login en desarrollo): `demo@lalivre.com` / `lalivre123`.
+
+Pantallas: Login, Dashboard, Libros (buscador + ficha del libro), Pedido (consulta/edición, importación CSV). El resto de las secciones del menú muestran "Próximamente".
+
+Qué está mockeado y dónde:
+
+- **Usuarios**: un único usuario demo (`modules/auth/infrastructure/in-memory-user-directory.ts`). La sesión es una cookie httpOnly firmada con HMAC; en producción definir `SESSION_SECRET`.
+- **Catálogo**: ~60 libros semilla en memoria (`modules/catalog/infrastructure/seed-books.ts`).
+- **Pedido**: en memoria del proceso, por cuenta; se reinicia al reiniciar el servidor. Arranca con un pedido de ejemplo.
+- **Cuenta** (saldo, actividad, consignaciones, ventas): `modules/account/infrastructure/mock-account-repository.ts`.
+- **Descargas PDF/XLS** y "Notificarme cuando ingrese": solo muestran un aviso.
+- **Importar pedido**: solo `.csv` (sin encabezados; columna A ISBN, columna B cantidad). `.xlsx` queda pendiente.
+
+Variables para previsualizar estados de la cuenta mock (en `apps/web/.env.local`):
+
+| Variable | Efecto |
+| --- | --- |
+| `LALIVRE_MOCK_ZONE=AMBA` | Zona de entrega AMBA (por defecto Interior) |
+| `LALIVRE_MOCK_SUSPENDED=1` | Cuenta suspendida: no se pueden agregar productos |
+| `LALIVRE_MOCK_ORDER_LOCKED=1` | Pedido bloqueado |
+| `LALIVRE_MOCK_NO_PROMOTIONS=1` | Oculta "Promociones" del menú |
+| `LALIVRE_MOCK_NO_CONSIGNMENT=1` | Oculta la tarjeta de consignaciones |
+
+Arquitectura: `src/modules/{auth,catalog,order,account}/{domain,application,infrastructure,ui}`; `src/composition.ts` es el único lugar que conecta los adaptadores mock, así que pasar a la API real solo toca `infrastructure/` y ese archivo. `src/proxy.ts` (ex-middleware) hace el chequeo optimista de sesión.
+
 ## Fuera de alcance por ahora
 
 - Modelo de catálogo y datos (`schema.prisma` aún no tiene modelos).
 - Precios y margen del 20 %.
-- Autenticación, carrito, checkout y panel de administración.
+- Autenticación real, checkout y panel de administración (el portal usa auth y pedido mock, ver arriba).
 - Despliegues (AWS u otros).

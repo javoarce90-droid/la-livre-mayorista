@@ -1,48 +1,61 @@
-:root {
-  --background: #fdfcf9;
-  --foreground: #1f1d1a;
-  --muted: #6b665e;
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-noto-sans), ui-sans-serif, system-ui, sans-serif;
+
+  /* Brand: deep teal / petrol */
+  --color-brand-50: #edf8f7;
+  --color-brand-100: #d3efed;
+  --color-brand-200: #a8dedb;
+  --color-brand-500: #14a3a3;
+  --color-brand-600: #0e9494;
+  --color-brand-700: #0b7676;
+  --color-brand-800: #0a5c5c;
+  --color-brand-900: #0b4a4a;
+  --color-brand-950: #073535;
+
+  /* Neutrals */
+  --color-canvas: #f3f5f6;
+  --color-surface: #ffffff;
+  --color-subtle: #f8fafb;
+  --color-line: #e1e7e9;
+  --color-ink: #1b2a2e;
+  --color-ink-muted: #5c6d72;
+  --color-ink-faint: #8a989c;
+
+  /* Status (reserved: always paired with a label) */
+  --color-success-50: #ecf8f0;
+  --color-success-200: #b9e4c7;
+  --color-success-700: #1f7a43;
+  --color-success-800: #1d6b3b;
+  --color-warning-50: #fff7e6;
+  --color-warning-200: #f6d79a;
+  --color-warning-700: #9a6100;
+  --color-danger-50: #fdeeee;
+  --color-danger-100: #fbdcdc;
+  --color-danger-200: #f3b9b9;
+  --color-danger-600: #d23c3c;
+  --color-danger-700: #b42727;
+
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px rgb(16 42 46 / 0.06), 0 1px 1px rgb(16 42 46 / 0.04);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #161513;
-    --foreground: #f2efe9;
-    --muted: #a39d93;
+@layer base {
+  html,
+  body {
+    min-height: 100%;
   }
-}
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
 
-html,
-body {
-  min-height: 100%;
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Georgia, "Times New Roman", serif;
-  line-height: 1.5;
-}
-
-main {
-  display: grid;
-  place-content: center;
-  gap: 0.5rem;
-  min-height: 100vh;
-  padding: 1.5rem;
-  text-align: center;
-}
-
-h1 {
-  font-size: clamp(2rem, 6vw, 3.5rem);
-}
-
-p {
-  color: var(--muted);
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
 }
