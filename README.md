@@ -72,9 +72,27 @@ pnpm --filter @la-livre/api db:validate # valida el schema de Prisma
 
 Las credenciales solo van en `apps/api/.env`, nunca en la web ni en variables `NEXT_PUBLIC_*`. El `.env` está ignorado por git.
 
+## Importar catálogo ONIX (muestra)
+
+El importador lee el ONIX 3.0 de Azeta en streaming (directamente del `.zip`, sin descomprimirlo a disco y con memoria constante) y escribe en la base de datos por lotes de 500 productos, cada lote en una transacción.
+
+```bash
+# Simulación: analiza y selecciona, muestra un resumen y 3 productos de ejemplo. No toca la base de datos.
+pnpm import:onix -- --file ~/Escritorio/Azeta_Catalogo_ONIX.zip --limit 1000 --include-publisher DEBOLSILLO --dry-run
+
+# Importación real (requiere DATABASE_URL en apps/api/.env)
+pnpm import:onix -- --file ~/Escritorio/Azeta_Catalogo_ONIX.zip --limit 1000 --include-publisher DEBOLSILLO
+```
+
+- `--limit N`: los primeros N productos (en el orden del archivo) de editoriales que no estén en `--include-publisher`.
+- `--include-publisher NOMBRE`: todos los productos de esa editorial (nombre exacto de `PublisherName`, sin distinguir mayúsculas). Se puede repetir. Si se usa sin `--limit`, solo se importan esas editoriales.
+- Sin `--limit` ni `--include-publisher` se importa el catálogo completo.
+- `--dry-run`: no se conecta a la base de datos. `--batch-size N` cambia el tamaño de lote.
+
+Con `--include-publisher` hay que recorrer el archivo entero (~1,1 millones de productos, alrededor de un minuto); con solo `--limit` la lectura se detiene al alcanzar el límite. Volver a importar es idempotente: actualiza libros y ofertas, reemplaza los colaboradores y nunca sobrescribe el descuento del proveedor, las reglas de precio existentes, el coste neto ni el precio de venta manual.
+
 ## Fuera de alcance por ahora
 
-- Importador ONIX (archivo de ~7 GB).
 - Modelo de catálogo y datos (`schema.prisma` aún no tiene modelos).
 - Precios y margen del 20 %.
 - Autenticación, carrito, checkout y panel de administración.

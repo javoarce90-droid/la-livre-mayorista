@@ -18,6 +18,7 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "db:generate": "pnpm --filter @la-livre/api db:generate",
     "db:migrate": "pnpm --filter @la-livre/api db:migrate",
-    "db:deploy": "pnpm --filter @la-livre/api db:deploy"
+    "db:deploy": "pnpm --filter @la-livre/api db:deploy",
+    "import:onix": "pnpm --filter @la-livre/api import:onix"
   }
 }

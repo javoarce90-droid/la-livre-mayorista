@@ -19,7 +19,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:validate": "prisma validate"
+    "db:validate": "prisma validate",
+    "import:onix": "nest build && node dist/catalog-import/cli/main.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -30,7 +31,9 @@
     "@prisma/client": "^7.10.0",
     "pg": "^8",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "saxes": "^6.0.0",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",
@@ -40,6 +43,7 @@
     "@types/node": "^24.0.0",
     "@types/pg": "^8",
     "@types/supertest": "^7.0.0",
+    "@types/yauzl": "^3.4.0",
     "@vitest/coverage-v8": "^4.1.2",
     "dotenv": "^18",
     "oxlint": "^1.58.0",
