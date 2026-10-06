@@ -25,7 +25,7 @@ export function AddBooksModal({ query, books, hasMore, pending, suspended, onLoa
       size="lg"
       title="Agregar a mi pedido"
       onClose={onClose}
-      footer={<Button onClick={onClose}>Listo</Button>}
+      footer={<Button size="lg" variant="secondary" onClick={onClose}>Listo</Button>}
     >
       <p className="mb-3 text-sm text-ink-muted">
         Resultados para <span className="font-mono text-ink">{query}</span>. Lo que agregues queda en el pedido cuando toques Guardar.
@@ -55,7 +55,7 @@ export function AddBooksModal({ query, books, hasMore, pending, suspended, onLoa
       )}
       {hasMore ? (
         <div className="flex justify-center pt-3">
-          <Button variant="secondary" disabled={pending} onClick={onLoadMore}>
+          <Button variant="secondary" size="lg" disabled={pending} onClick={onLoadMore}>
             {pending ? "Buscando…" : "Buscar más resultados"}
           </Button>
         </div>

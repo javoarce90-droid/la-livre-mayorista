@@ -34,7 +34,7 @@ export function SegmentedControl<T extends string>({
             disabled={disabled}
             onClick={() => onChange(option.value)}
             className={cx(
-              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+              "min-h-11 rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-brand-600 disabled:opacity-50 sm:min-h-0 sm:text-xs",
               selected ? "bg-surface text-brand-800 shadow-card" : "text-ink-muted hover:text-ink",
             )}
           >

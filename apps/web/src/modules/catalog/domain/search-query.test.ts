@@ -1,69 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { criterionLabel, parseSearchQuery } from "./search-query";
+import { criterionLabel, normalizeIsbn, parseLegacyShortcut, parseSearchQuery } from "./search-query";
 
-describe("parseSearchQuery — field letter", () => {
+describe("parseSearchQuery — plain text (default)", () => {
   it.each([
-    ["TCASA", "title", "CASA"],
-    ["ABORGES", "author", "BORGES"],
-    ["EALFAGUARA", "publisher", "ALFAGUARA"],
-    ["I9789503074060", "isbn", "9789503074060"],
-    ["C104882", "code", "104882"],
-  ])("%s selects the %s field", (input, field, text) => {
-    expect(parseSearchQuery(input)).toEqual({ ok: true, value: { kind: "position", field, text } });
+    ["Rayuela", ["Rayuela"]],
+    ["cien años", ["cien", "años"]],
+    ["  borges   aleph ", ["borges", "aleph"]],
+    ["Antología poética", ["Antología", "poética"]],
+    ["TCASA", ["TCASA"]],
+  ])("%s is a keyword search", (input, words) => {
+    expect(parseSearchQuery(input)).toEqual({ ok: true, value: { kind: "keywords", words } });
   });
 
-  it("accepts lowercase letters", () => {
-    expect(parseSearchQuery("tcasa")).toEqual({
-      ok: true,
-      value: { kind: "position", field: "title", text: "casa" },
-    });
-  });
-
-  it("keeps inner spaces of the text", () => {
-    expect(parseSearchQuery("TCIEN AÑOS")).toEqual({
-      ok: true,
-      value: { kind: "position", field: "title", text: "CIEN AÑOS" },
-    });
-  });
-
-  it("trims surrounding whitespace", () => {
-    expect(parseSearchQuery("   TCASA  ")).toEqual({
-      ok: true,
-      value: { kind: "position", field: "title", text: "CASA" },
-    });
-  });
-});
-
-describe("parseSearchQuery — errors", () => {
   it("rejects empty input", () => {
     expect(parseSearchQuery("   ")).toEqual({ ok: false, error: "empty" });
   });
+});
 
-  it("rejects an unknown letter", () => {
-    expect(parseSearchQuery("XCASA")).toEqual({ ok: false, error: "unknown_field" });
+describe("parseSearchQuery — ISBN", () => {
+  it.each(["9789503074060", "978-950-307-406-0", "978 950 307 406 0"])("detects a typed ISBN: %s", (input) => {
+    expect(parseSearchQuery(input)).toEqual({ ok: true, value: { kind: "isbn", isbn: "9789503074060" } });
   });
 
-  it("rejects a letter without text", () => {
-    expect(parseSearchQuery("T")).toEqual({ ok: false, error: "missing_text" });
+  it("treats shorter numbers as keywords (e.g. an internal code)", () => {
+    expect(parseSearchQuery("104882")).toEqual({ ok: true, value: { kind: "keywords", words: ["104882"] } });
   });
 
-  it("rejects a space between the letter and the text", () => {
-    expect(parseSearchQuery("T CASA")).toEqual({ ok: false, error: "space_after_letter" });
+  it.each(["*9789503074060*", "(9789503074060)"])("treats scanner input %s as an ISBN", (input) => {
+    expect(parseSearchQuery(input)).toEqual({ ok: true, value: { kind: "isbn", isbn: "9789503074060" } });
   });
 
-  it.each(["I978950307406", "I97895030740601", "I978-950-307-406-0", "I97895030740AB"])(
-    "rejects an ISBN that is not 13 digits: %s",
-    (input) => {
-      expect(parseSearchQuery(input)).toEqual({ ok: false, error: "invalid_isbn" });
-    },
-  );
-
-  it("rejects combined criteria when the first one lacks +", () => {
-    expect(parseSearchQuery("TCUENTOS +ABORGES")).toEqual({ ok: false, error: "missing_plus" });
+  it("rejects scanner input that does not contain 13 digits", () => {
+    expect(parseSearchQuery("*12345*")).toEqual({ ok: false, error: "invalid_isbn" });
   });
 });
 
-describe("parseSearchQuery — contains (+)", () => {
+describe("parseSearchQuery — legacy + shortcut", () => {
   it("parses a single + criterion", () => {
     expect(parseSearchQuery("+TCASA")).toEqual({
       ok: true,
@@ -71,20 +43,7 @@ describe("parseSearchQuery — contains (+)", () => {
     });
   });
 
-  it("parses combined criteria separated by spaces", () => {
-    expect(parseSearchQuery("+TCUENTOS +ABORGES")).toEqual({
-      ok: true,
-      value: {
-        kind: "contains",
-        criteria: [
-          { field: "title", text: "CUENTOS" },
-          { field: "author", text: "BORGES" },
-        ],
-      },
-    });
-  });
-
-  it("allows multi-word text inside a + criterion", () => {
+  it("parses combined criteria with multi-word text", () => {
     expect(parseSearchQuery("+TCIEN AÑOS   +AGARCIA")).toEqual({
       ok: true,
       value: {
@@ -97,50 +56,68 @@ describe("parseSearchQuery — contains (+)", () => {
     });
   });
 
+  it("accepts an ISBN with dashes inside +I", () => {
+    expect(parseSearchQuery("+I978-950-307-406-0")).toEqual({
+      ok: true,
+      value: { kind: "contains", criteria: [{ field: "isbn", text: "9789503074060" }] },
+    });
+  });
+
   it("propagates errors from any criterion", () => {
     expect(parseSearchQuery("+TCASA +Q")).toEqual({ ok: false, error: "unknown_field" });
     expect(parseSearchQuery("+TCASA +A")).toEqual({ ok: false, error: "missing_text" });
+    expect(parseSearchQuery("+T CASA")).toEqual({ ok: false, error: "space_after_letter" });
+    expect(parseSearchQuery("+I123")).toEqual({ ok: false, error: "invalid_isbn" });
     expect(parseSearchQuery("+")).toEqual({ ok: false, error: "missing_text" });
+  });
+
+  it("flags combined shortcuts whose first criterion lacks +", () => {
+    expect(parseSearchQuery("TCUENTOS +ABORGES")).toEqual({ ok: false, error: "missing_plus" });
   });
 });
 
-describe("parseSearchQuery — barcode scan", () => {
-  it("treats text starting with * as a barcode and searches by ISBN", () => {
-    expect(parseSearchQuery("*9789503074060*")).toEqual({
-      ok: true,
-      value: { kind: "barcode", isbn: "9789503074060" },
-    });
+describe("parseLegacyShortcut", () => {
+  it.each([
+    ["TCASA", "title", "CASA"],
+    ["aborges", "author", "borges"],
+    ["EALFAGUARA", "publisher", "ALFAGUARA"],
+    ["I9789503074060", "isbn", "9789503074060"],
+    ["C104882", "code", "104882"],
+  ])("reads %s as %s", (input, field, text) => {
+    expect(parseLegacyShortcut(input)).toEqual({ kind: "position", field, text });
   });
 
-  it("treats text starting with ( as a barcode", () => {
-    expect(parseSearchQuery("(9789503074060)")).toEqual({
-      ok: true,
-      value: { kind: "barcode", isbn: "9789503074060" },
-    });
+  it.each(["", "T", "XCASA", "T CASA", "+TCASA", "*978"])("returns null for %j", (input) => {
+    expect(parseLegacyShortcut(input)).toBeNull();
+  });
+});
+
+describe("normalizeIsbn", () => {
+  it("strips dashes and spaces", () => {
+    expect(normalizeIsbn("978-950 307-406-0")).toBe("9789503074060");
   });
 
-  it("rejects a barcode that does not contain 13 digits", () => {
-    expect(parseSearchQuery("*12345*")).toEqual({ ok: false, error: "invalid_isbn" });
+  it("returns null for anything that is not 13 digits", () => {
+    expect(normalizeIsbn("978950307406")).toBeNull();
+    expect(normalizeIsbn("97895030740AB")).toBeNull();
   });
 });
 
 describe("criterionLabel", () => {
   it.each([
-    ["TCASA", "Título"],
-    ["a", "Autor"],
-    ["Ealfa", "Editorial"],
-    ["I978", "ISBN"],
-    ["C1", "Código"],
     ["+ABORGES", "Autor"],
+    ["+tcasa", "Título"],
+    ["978-950-307-406-0", "ISBN"],
     ["*978", "Código de barras"],
     ["(978", "Código de barras"],
   ])("%s → %s", (input, label) => {
     expect(criterionLabel(input)).toBe(label);
   });
 
-  it("returns null for empty or unknown input", () => {
+  it("stays hidden for plain text, so a title starting with A is not labelled Autor", () => {
+    expect(criterionLabel("Antología")).toBeNull();
+    expect(criterionLabel("TCASA")).toBeNull();
     expect(criterionLabel("")).toBeNull();
-    expect(criterionLabel("X")).toBeNull();
     expect(criterionLabel("+")).toBeNull();
   });
 });

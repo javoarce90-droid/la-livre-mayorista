@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { formatDate } from "@/shared/lib/format";
 import { DataTable, type DataColumn } from "@/shared/ui/DataTable";
 import { Money } from "@/shared/ui/Money";
@@ -30,7 +31,15 @@ const COLUMNS: DataColumn<BookView>[] = [
   },
 ];
 
-export function BookResultsTable({ books, onOpen }: { books: readonly BookView[]; onOpen: (book: BookView) => void }) {
+export function BookResultsTable({
+  books,
+  onOpen,
+  empty = "No encontramos libros con esa búsqueda. Probá con menos palabras o revisá la Ayuda.",
+}: {
+  books: readonly BookView[];
+  onOpen: (book: BookView) => void;
+  empty?: ReactNode;
+}) {
   return (
     <DataTable
       caption="Resultados de la búsqueda"
@@ -47,7 +56,7 @@ export function BookResultsTable({ books, onOpen }: { books: readonly BookView[]
           </div>
         </div>
       )}
-      empty="No encontramos libros con ese criterio. Probá con otro texto o revisá la Ayuda."
+      empty={empty}
     />
   );
 }

@@ -1,6 +1,6 @@
 import type { AddBookError } from "../application/add-book-to-order";
 import type { SaveOrderError } from "../application/save-order";
-import type { DecreaseQuantityError } from "../domain/order";
+import type { ChangeQuantityError } from "../domain/order";
 import type { ImportErrorReason } from "../domain/order-import";
 
 export const SUSPENDED_MESSAGE = "La cuenta se encuentra suspendida o cerrada. No es posible agregar productos al pedido.";
@@ -27,20 +27,20 @@ export function saveOrderErrorMessage(error: SaveOrderError): string {
     case "invalid_quantity":
       return "Hay cantidades inválidas en el pedido.";
     case "empty_order":
-      return "No podés despachar un pedido vacío.";
+      return "No podés despachar un pedido vacío. Agregá al menos un título.";
   }
 }
 
-export function decreaseQuantityErrorMessage(error: DecreaseQuantityError, current: number): string {
+export function changeQuantityErrorMessage(error: ChangeQuantityError, maximum: number): string {
   switch (error) {
     case "not_found":
       return "El título ya no está en el pedido.";
     case "not_integer":
-      return "Ingresá un número entero.";
+      return "Ingresá un número entero, por ejemplo 3.";
     case "below_minimum":
       return "La cantidad mínima es 1. Para sacarlo del pedido usá Quitar.";
-    case "not_lower":
-      return `Solo podés bajar la cantidad: ingresá un número menor que ${current}.`;
+    case "above_maximum":
+      return `Desde acá podés dejar hasta ${maximum}. Para pedir más, buscalo abajo y agregalo de nuevo.`;
   }
 }
 

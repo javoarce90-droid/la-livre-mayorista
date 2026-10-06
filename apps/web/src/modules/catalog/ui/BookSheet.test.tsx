@@ -38,4 +38,15 @@ describe("BookSheet", () => {
     rerender(<BookSheet book={{ ...book, availability: "on_order" }} onClose={() => {}} />);
     expect(screen.getByText("Notificarme cuando ingrese")).toBeTruthy();
   });
+
+  it("pins the add-to-order slot in the footer, outside the scrollable body", () => {
+    render(<BookSheet book={book} onClose={() => {}} addSlot={<button type="button">Agregar al pedido</button>} />);
+    const add = screen.getByRole("button", { name: "Agregar al pedido" });
+    expect(add.closest("footer")).not.toBeNull();
+  });
+
+  it("renders no footer when opened read-only", () => {
+    render(<BookSheet book={book} onClose={() => {}} />);
+    expect(screen.getByRole("dialog").querySelector("footer")).toBeNull();
+  });
 });

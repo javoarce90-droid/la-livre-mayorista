@@ -1,5 +1,5 @@
 import { normalizeText } from "@/shared/lib/text";
-import type { Availability, AvailabilityFilter, Book } from "./book";
+import type { Book } from "./book";
 import type { SearchField, SearchQuery } from "./search-query";
 
 function fieldValue(book: Book, field: SearchField): string {
@@ -28,14 +28,49 @@ function sortByField(books: Book[], field: SearchField): Book[] {
   );
 }
 
+/** Default order when there is no text query (filters only). */
+export function sortBooksByTitle(books: readonly Book[]): Book[] {
+  return sortByField([...books], "title");
+}
+
 function isExactField(field: SearchField): boolean {
   return field === "isbn" || field === "code";
+}
+
+/** "978-950" → "978950" so ISBN fragments typed with dashes still match. */
+function normalizeWord(word: string): string {
+  return /^[\d-]+$/.test(word) ? word.replace(/-/g, "") : normalizeText(word);
+}
+
+function keywordHaystack(book: Book): string {
+  return normalizeText([book.title, book.author, book.publisher, book.isbn, book.code].join(" "));
+}
+
+/** 0: title starts with the phrase · 1: every word is in the title · 2: words spread across fields. */
+function keywordRank(book: Book, phrase: string, words: string[]): number {
+  const title = normalizeText(book.title);
+  if (title.startsWith(phrase)) return 0;
+  if (words.every((word) => title.includes(word))) return 1;
+  return 2;
+}
+
+function matchKeywords(books: readonly Book[], rawWords: string[]): Book[] {
+  const words = rawWords.map(normalizeWord).filter(Boolean);
+  const phrase = normalizeText(rawWords.join(" "));
+  const matches = books.filter((book) => {
+    const haystack = keywordHaystack(book);
+    return words.every((word) => haystack.includes(word));
+  });
+  return sortByField(matches, "title").sort((a, b) => keywordRank(a, phrase, words) - keywordRank(b, phrase, words));
 }
 
 /** Applies a parsed query to a list of books, returning matches in display order. */
 export function matchBooks(books: readonly Book[], query: SearchQuery): Book[] {
   switch (query.kind) {
-    case "barcode":
+    case "keywords":
+      return matchKeywords(books, query.words);
+
+    case "isbn":
       return books.filter((book) => book.isbn === query.isbn);
 
     case "contains": {
@@ -62,17 +97,4 @@ export function matchBooks(books: readonly Book[], query: SearchQuery): Book[] {
       return sortByField(matches, field);
     }
   }
-}
-
-const ALLOWED: Record<AvailabilityFilter, readonly Availability[]> = {
-  all: ["immediate", "on_order", "out_of_stock"],
-  immediate: ["immediate"],
-  immediate_and_on_order: ["immediate", "on_order"],
-};
-
-export function filterByAvailability<T extends { availability: Availability }>(
-  items: readonly T[],
-  filter: AvailabilityFilter,
-): T[] {
-  return items.filter((item) => ALLOWED[filter].includes(item.availability));
 }

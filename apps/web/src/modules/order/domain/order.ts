@@ -35,7 +35,14 @@ export interface OrderTotals {
 }
 
 export type AddLineError = "invalid_quantity";
-export type DecreaseQuantityError = "not_found" | "not_integer" | "below_minimum" | "not_lower";
+export type ChangeQuantityError = "not_found" | "not_integer" | "below_minimum" | "above_maximum";
+
+/** What changed between the last saved order and the draft. */
+export interface OrderDiff {
+  added: OrderLine[];
+  removed: OrderLine[];
+  changed: { line: OrderLine; from: number; to: number }[];
+}
 
 export function isValidQuantity(quantity: number): boolean {
   return Number.isInteger(quantity) && quantity >= 1;
@@ -76,20 +83,62 @@ export function removeLine(lines: readonly OrderLine[], bookCode: string): Order
   return lines.filter((line) => line.bookCode !== bookCode);
 }
 
-export function canDecreaseQuantity(line: Pick<OrderLine, "quantity">): boolean {
-  return line.quantity > 1;
+/**
+ * The single parser for every quantity field (order lines, "Agregar al pedido").
+ * Liberal on input (Postel): surrounding/inner spaces, a leading "+" and thousands
+ * dots ("1.000") are accepted. Returns the whole number typed — validity (>= 1,
+ * ceilings) is the caller's rule — or null when it is not a whole number.
+ */
+export function parseQuantity(text: string): number | null {
+  const compact = text
+    .replace(/\s+/g, "")
+    .replace(/^\+/, "")
+    .replace(/\.(?=\d{3}(\D|$))/g, "");
+  if (!/^-?\d+$/.test(compact)) return null;
+  const quantity = Number(compact);
+  return Number.isSafeInteger(quantity) ? quantity : null;
 }
 
-/** Quantities can only go down from the order screen: 1 ≤ new < current. */
-export function decreaseQuantity(
+/**
+ * The order screen never raises a quantity above what was already loaded (saved
+ * or just added through search/import, which went through the stock check).
+ * Within that ceiling the user can move freely: 1 ≤ new ≤ maximum. Going above
+ * it means adding the book again, so the availability check runs.
+ */
+export function setLineQuantity(
   lines: readonly OrderLine[],
   bookCode: string,
   newQuantity: number,
-): Result<OrderLine[], DecreaseQuantityError> {
+  maximum: number,
+): Result<OrderLine[], ChangeQuantityError> {
   const line = lines.find((current) => current.bookCode === bookCode);
   if (!line) return err("not_found");
   if (!Number.isInteger(newQuantity)) return err("not_integer");
   if (newQuantity < 1) return err("below_minimum");
-  if (newQuantity >= line.quantity) return err("not_lower");
+  if (newQuantity > maximum) return err("above_maximum");
   return ok(lines.map((current) => (current.bookCode === bookCode ? { ...current, quantity: newQuantity } : current)));
+}
+
+/** Re-inserts a removed line at its previous position (undo of `removeLine`). */
+export function restoreLine(lines: readonly OrderLine[], line: OrderLine, index: number): OrderLine[] {
+  if (lines.some((current) => current.bookCode === line.bookCode)) return [...lines];
+  const position = Math.max(0, Math.min(index, lines.length));
+  return [...lines.slice(0, position), { ...line }, ...lines.slice(position)];
+}
+
+export function diffOrder(before: readonly OrderLine[], after: readonly OrderLine[]): OrderDiff {
+  const previous = new Map(before.map((line) => [line.bookCode, line]));
+  const next = new Set(after.map((line) => line.bookCode));
+  const diff: OrderDiff = { added: [], removed: [], changed: [] };
+  for (const line of after) {
+    const old = previous.get(line.bookCode);
+    if (!old) diff.added.push(line);
+    else if (old.quantity !== line.quantity) diff.changed.push({ line, from: old.quantity, to: line.quantity });
+  }
+  for (const line of before) if (!next.has(line.bookCode)) diff.removed.push(line);
+  return diff;
+}
+
+export function hasChanges(diff: OrderDiff): boolean {
+  return diff.added.length + diff.removed.length + diff.changed.length > 0;
 }

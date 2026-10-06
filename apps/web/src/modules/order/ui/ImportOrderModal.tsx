@@ -43,13 +43,13 @@ export function ImportOrderModal({ onClose, onImported }: { onClose: () => void;
       onClose={onClose}
       footer={
         result ? (
-          <Button onClick={onClose}>Listo</Button>
+          <Button size="lg" onClick={onClose}>Listo</Button>
         ) : (
           <>
-            <Button variant="secondary" onClick={onClose}>
+            <Button size="lg" variant="secondary" onClick={onClose}>
               Cancelar
             </Button>
-            <Button type="submit" form="import-form" disabled={pending}>
+            <Button size="lg" type="submit" form="import-form" disabled={pending}>
               {pending ? "Importando…" : "Importar"}
             </Button>
           </>
