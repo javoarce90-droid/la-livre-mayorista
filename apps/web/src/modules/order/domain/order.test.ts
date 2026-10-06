@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   addLine,
-  canDecreaseQuantity,
-  decreaseQuantity,
+  diffOrder,
+  hasChanges,
+  isValidQuantity,
   lineNetUnitPrice,
   lineTotal,
   orderTotals,
+  parseQuantity,
   removeLine,
+  restoreLine,
+  setLineQuantity,
   type OrderLine,
 } from "./order";
 
@@ -93,40 +97,97 @@ describe("removeLine", () => {
   });
 });
 
-describe("decreaseQuantity", () => {
-  const lines = [line({ bookCode: "a", quantity: 5 })];
+describe("parseQuantity", () => {
+  // Postel: accept what people type or paste; validity (>= 1, ceilings) is checked by the caller.
+  it.each([
+    ["3", 3],
+    ["  12 ", 12],
+    ["1.000", 1000],
+    ["1 000", 1000],
+    ["+4", 4],
+    ["0", 0],
+    ["-2", -2],
+  ])("parses %j as %d", (text, expected) => {
+    expect(parseQuantity(text)).toBe(expected);
+  });
+
+  it.each(["", "  ", "2,5", "2.5", "1.00", "abc", "2e3", "3 libros", "99999999999999999999"])("rejects %j", (text) => {
+    expect(parseQuantity(text)).toBeNull();
+  });
+});
+
+describe("isValidQuantity", () => {
+  it("accepts whole numbers from 1 up", () => {
+    expect(isValidQuantity(1)).toBe(true);
+    expect(isValidQuantity(0)).toBe(false);
+    expect(isValidQuantity(1.5)).toBe(false);
+  });
+});
+
+describe("setLineQuantity", () => {
+  const lines = [line({ bookCode: "a", quantity: 3 })];
 
   it("lowers the quantity", () => {
-    const result = decreaseQuantity(lines, "a", 2);
+    const result = setLineQuantity(lines, "a", 2, 5);
     expect(result.ok && result.value[0].quantity).toBe(2);
   });
 
-  it("allows going down to 1", () => {
-    const result = decreaseQuantity(lines, "a", 1);
-    expect(result.ok && result.value[0].quantity).toBe(1);
+  it("raises it back up to the ceiling (e.g. after lowering by mistake)", () => {
+    const result = setLineQuantity(lines, "a", 5, 5);
+    expect(result.ok && result.value[0].quantity).toBe(5);
   });
 
-  it("rejects equal or higher quantities", () => {
-    expect(decreaseQuantity(lines, "a", 5)).toEqual({ ok: false, error: "not_lower" });
-    expect(decreaseQuantity(lines, "a", 9)).toEqual({ ok: false, error: "not_lower" });
+  it("rejects quantities above the ceiling", () => {
+    expect(setLineQuantity(lines, "a", 6, 5)).toEqual({ ok: false, error: "above_maximum" });
   });
 
   it("rejects quantities below 1", () => {
-    expect(decreaseQuantity(lines, "a", 0)).toEqual({ ok: false, error: "below_minimum" });
+    expect(setLineQuantity(lines, "a", 0, 5)).toEqual({ ok: false, error: "below_minimum" });
   });
 
   it("rejects non-integer quantities", () => {
-    expect(decreaseQuantity(lines, "a", 2.5)).toEqual({ ok: false, error: "not_integer" });
+    expect(setLineQuantity(lines, "a", Number.NaN, 5)).toEqual({ ok: false, error: "not_integer" });
+    expect(setLineQuantity(lines, "a", 2.5, 5)).toEqual({ ok: false, error: "not_integer" });
   });
 
   it("rejects unknown books", () => {
-    expect(decreaseQuantity(lines, "x", 1)).toEqual({ ok: false, error: "not_found" });
+    expect(setLineQuantity(lines, "x", 1, 5)).toEqual({ ok: false, error: "not_found" });
+  });
+
+  it("does not mutate the original lines", () => {
+    setLineQuantity(lines, "a", 1, 5);
+    expect(lines[0].quantity).toBe(3);
   });
 });
 
-describe("canDecreaseQuantity", () => {
-  it("is only possible when the quantity is above 1", () => {
-    expect(canDecreaseQuantity(line({ quantity: 2 }))).toBe(true);
-    expect(canDecreaseQuantity(line({ quantity: 1 }))).toBe(false);
+describe("restoreLine", () => {
+  it("puts a removed line back where it was", () => {
+    const lines = [line({ bookCode: "a" }), line({ bookCode: "b" }), line({ bookCode: "c" })];
+    const removed = removeLine(lines, "b");
+    expect(restoreLine(removed, lines[1], 1).map((l) => l.bookCode)).toEqual(["a", "b", "c"]);
+  });
+
+  it("clamps the position and never duplicates", () => {
+    const lines = [line({ bookCode: "a" })];
+    expect(restoreLine(lines, line({ bookCode: "b" }), 99).map((l) => l.bookCode)).toEqual(["a", "b"]);
+    expect(restoreLine(lines, line({ bookCode: "a" }), 0)).toHaveLength(1);
   });
 });
+
+describe("diffOrder", () => {
+  it("reports added, removed and changed lines", () => {
+    const before = [line({ bookCode: "a", quantity: 4 }), line({ bookCode: "b", quantity: 1 })];
+    const after = [line({ bookCode: "a", quantity: 2 }), line({ bookCode: "c", quantity: 1 })];
+    const diff = diffOrder(before, after);
+    expect(diff.added.map((l) => l.bookCode)).toEqual(["c"]);
+    expect(diff.removed.map((l) => l.bookCode)).toEqual(["b"]);
+    expect(diff.changed.map(({ line: l, from, to }) => [l.bookCode, from, to])).toEqual([["a", 4, 2]]);
+    expect(hasChanges(diff)).toBe(true);
+  });
+
+  it("is empty when nothing changed", () => {
+    const lines = [line({ bookCode: "a" })];
+    expect(hasChanges(diffOrder(lines, [...lines]))).toBe(false);
+  });
+});
+

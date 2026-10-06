@@ -14,11 +14,12 @@ import { BookCover } from "./BookCover";
 import { usePvpMode } from "./use-pvp-mode";
 
 const sectionTitle = "text-[11px] font-semibold tracking-wider text-ink-muted uppercase";
+const priceClass = "text-2xl font-semibold text-ink md:text-3xl";
 
 export interface BookSheetProps {
   book: BookView;
   onClose: () => void;
-  /** "Agregar al pedido" area; omitted when the sheet is opened read-only. */
+  /** "Agregar al pedido" area, pinned to the sheet footer; omitted when the sheet is opened read-only. */
   addSlot?: ReactNode;
 }
 
@@ -28,7 +29,7 @@ function PriceBlock({ book, pvpMode }: { book: BookView; pvpMode: boolean }) {
     return (
       <div>
         <p className="text-xs text-ink-muted">PVP</p>
-        <Money cents={price.listPrice} className="text-3xl font-semibold text-ink" />
+        <Money cents={price.listPrice} className={priceClass} />
       </div>
     );
   }
@@ -40,7 +41,7 @@ function PriceBlock({ book, pvpMode }: { book: BookView; pvpMode: boolean }) {
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <Money cents={price.netPrice} className="text-3xl font-semibold text-ink" />
+        <Money cents={price.netPrice} className={priceClass} />
         {hasDiscount ? <Money cents={price.listPrice} strike className="text-sm text-ink-faint" /> : null}
         {promotion ? <Badge tone="danger">{promotion.name}</Badge> : null}
       </div>
@@ -70,14 +71,16 @@ export function BookSheet({ book, onClose, addSlot }: BookSheetProps) {
       title={`Ficha #${book.code}`}
       onClose={onClose}
       headerActions={
-        <Button variant="secondary" size="sm" aria-pressed={pvpMode} onClick={() => setPvpMode(!pvpMode)}>
-          {pvpMode ? <EyeOff aria-hidden className="size-3.5" /> : <Eye aria-hidden className="size-3.5" />}
+        <Button variant="secondary" size="touch" aria-pressed={pvpMode} onClick={() => setPvpMode(!pvpMode)}>
+          {pvpMode ? <EyeOff aria-hidden className="size-4 sm:size-3.5" /> : <Eye aria-hidden className="size-4 sm:size-3.5" />}
           {pvpMode ? "Ocultar modo PVP" : "Ver modo PVP"}
         </Button>
       }
+      footer={addSlot ? <div className="w-full md:max-w-md">{addSlot}</div> : undefined}
     >
-      <div className="grid gap-6 md:grid-cols-[160px_minmax(0,1fr)_240px]">
-        <div className="flex justify-center md:block">
+      {/* Phone: cover beside title + price so the decision data fits the first screen. Desktop: 3 columns. */}
+      <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-x-4 gap-y-6 md:grid-cols-[160px_minmax(0,1fr)_240px] md:gap-x-6">
+        <div>
           <BookCover promotion={pvpMode ? null : book.promotion} size="lg" />
         </div>
 
@@ -94,33 +97,41 @@ export function BookSheet({ book, onClose, addSlot }: BookSheetProps) {
             <div className="mt-1.5">
               <AvailabilityPill availability={book.availability} />
             </div>
+            {book.availability !== "immediate" ? (
+              <Button
+                variant="ghost"
+                size="touch"
+                className="-ml-3 mt-1"
+                onClick={() => toast("Listo: te avisamos cuando ingrese.")}
+              >
+                <BellRing aria-hidden className="size-4 sm:size-3.5" />
+                Notificarme cuando ingrese
+              </Button>
+            ) : null}
           </div>
-          {addSlot}
-          {book.availability !== "immediate" ? (
-            <Button variant="ghost" size="sm" onClick={() => toast("Listo: te avisamos cuando ingrese.")}>
-              <BellRing aria-hidden className="size-3.5" />
-              Notificarme cuando ingrese
-            </Button>
-          ) : null}
         </div>
 
-        <div>
-          <p className={sectionTitle}>Ficha técnica</p>
-          <dl className="mt-2 divide-y divide-line text-xs">
+        <section aria-labelledby={`tech-${book.code}`} className="col-span-2 md:col-span-1">
+          <h4 id={`tech-${book.code}`} className={sectionTitle}>
+            Ficha técnica
+          </h4>
+          <dl className="mt-2 divide-y divide-line text-sm md:text-xs">
             {technical.map(([label, value]) => (
-              <div key={label} className="flex justify-between gap-3 py-1.5">
+              <div key={label} className="flex justify-between gap-3 py-2 md:py-1.5">
                 <dt className="text-ink-muted">{label}</dt>
                 <dd className="text-right font-medium text-ink">{value}</dd>
               </div>
             ))}
           </dl>
-        </div>
+        </section>
       </div>
 
-      <div className="mt-6 border-t border-line pt-4">
-        <p className={sectionTitle}>Reseña</p>
+      <section aria-labelledby={`review-${book.code}`} className="mt-6 border-t border-line pt-4">
+        <h4 id={`review-${book.code}`} className={sectionTitle}>
+          Reseña
+        </h4>
         <p className="mt-2 text-sm leading-relaxed text-ink">{book.review}</p>
-      </div>
+      </section>
     </Modal>
   );
 }

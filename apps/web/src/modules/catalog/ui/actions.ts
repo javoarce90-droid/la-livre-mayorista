@@ -4,28 +4,27 @@ import { container } from "@/composition";
 import { requirePortalContext } from "@/portal-context";
 import type { BookView } from "../application/book-view";
 import { searchBooks } from "../application/search-books";
-import type { AvailabilityFilter } from "../domain/book";
-import { searchErrorMessage } from "./messages";
+import { sanitizeFilters, type SearchFilters } from "../domain/search-filters";
+import { interpretationNotice, searchErrorMessage } from "./messages";
 
 export type SearchActionResult =
-  | { ok: true; items: BookView[]; total: number; nextOffset: number | null }
+  | { ok: true; items: BookView[]; total: number; nextOffset: number | null; notice: string | null }
   | { ok: false; message: string };
-
-const FILTERS: readonly AvailabilityFilter[] = ["all", "immediate", "immediate_and_on_order"];
 
 export async function searchBooksAction(input: {
   query: string;
-  availability: AvailabilityFilter;
+  filters?: Partial<SearchFilters>;
   offset: number;
 }): Promise<SearchActionResult> {
   const { account } = await requirePortalContext();
-  const availability = FILTERS.includes(input.availability) ? input.availability : "all";
   const offset = Number.isInteger(input.offset) && input.offset >= 0 ? input.offset : 0;
   const result = await searchBooks(container().catalog, {
     input: String(input.query ?? ""),
-    availability,
+    filters: sanitizeFilters(input.filters),
     offset,
     discountPercent: account.discountPercent,
   });
-  return result.ok ? { ok: true, ...result.value } : { ok: false, message: searchErrorMessage(result.error) };
+  if (!result.ok) return { ok: false, message: searchErrorMessage(result.error) };
+  const { interpretedAs, ...page } = result.value;
+  return { ok: true, ...page, notice: interpretedAs ? interpretationNotice(interpretedAs) : null };
 }

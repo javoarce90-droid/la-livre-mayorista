@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Book } from "./book";
-import { filterByAvailability, matchBooks } from "./search-matching";
+import { matchBooks, sortBooksByTitle } from "./search-matching";
 import { makeBook } from "./test-fixtures";
 import type { SearchQuery } from "./search-query";
 
@@ -14,28 +14,40 @@ const books: Book[] = [
 ];
 
 const titles = (result: Book[]) => result.map((b) => b.title);
+const keywords = (text: string): SearchQuery => ({ kind: "keywords", words: text.split(" ") });
 
-describe("matchBooks — position search", () => {
-  it("positions alphabetically by title starting at the text", () => {
-    const query: SearchQuery = { kind: "position", field: "title", text: "CASA" };
-    expect(titles(matchBooks(books, query))).toEqual([
-      "Casa tomada y otros cuentos",
-      "Cien años de soledad",
-      "Cuentos completos",
-      "Ficciones",
-      "La casa de los espíritus",
-      "Rayuela",
-    ]);
+describe("matchBooks — keywords (plain text)", () => {
+  it("finds a title typed directly, without any prefix", () => {
+    expect(titles(matchBooks(books, keywords("rayuela")))).toEqual(["Rayuela"]);
   });
 
-  it("starts after earlier titles", () => {
+  it("is case and accent insensitive", () => {
+    expect(titles(matchBooks(books, keywords("CIEN ANOS")))).toEqual(["Cien años de soledad"]);
+  });
+
+  it("requires every word, in any field and any order", () => {
+    expect(titles(matchBooks(books, keywords("borges cuentos")))).toEqual(["Cuentos completos"]);
+    expect(titles(matchBooks(books, keywords("julio cortazar")))).toEqual(["Casa tomada y otros cuentos", "Rayuela"]);
+  });
+
+  it("ranks titles that start with the text first, then titles containing it, then other fields", () => {
+    expect(titles(matchBooks(books, keywords("casa")))).toEqual(["Casa tomada y otros cuentos", "La casa de los espíritus"]);
+    expect(titles(matchBooks(books, keywords("cuentos")))).toEqual(["Cuentos completos", "Casa tomada y otros cuentos"]);
+  });
+
+  it("matches ISBN fragments typed with dashes and internal codes", () => {
+    expect(titles(matchBooks(books, keywords("978-0000000004")))).toEqual(["Ficciones"]);
+  });
+
+  it("returns nothing when a word is missing", () => {
+    expect(matchBooks(books, keywords("rayuela borges"))).toEqual([]);
+  });
+});
+
+describe("matchBooks — legacy position shortcut", () => {
+  it("positions alphabetically by title starting at the text", () => {
     const query: SearchQuery = { kind: "position", field: "title", text: "L" };
     expect(titles(matchBooks(books, query))).toEqual(["La casa de los espíritus", "Rayuela"]);
-  });
-
-  it("is accent and case insensitive", () => {
-    const query: SearchQuery = { kind: "position", field: "author", text: "garcía márquez" };
-    expect(titles(matchBooks(books, query))).toEqual(["Cien años de soledad"]);
   });
 
   it("orders author positioning by author then title", () => {
@@ -54,28 +66,13 @@ describe("matchBooks — position search", () => {
     expect(titles(matchBooks(books, query))).toEqual(["Ficciones", "La casa de los espíritus"]);
   });
 
-  it("matches publishers accent-insensitively", () => {
-    const query: SearchQuery = { kind: "position", field: "publisher", text: "EMECE" };
-    expect(titles(matchBooks(books, query))).toEqual(["Cuentos completos"]);
-  });
-
-  it("matches ISBN exactly", () => {
+  it("matches ISBN and internal code exactly", () => {
     expect(titles(matchBooks(books, { kind: "position", field: "isbn", text: "9780000000004" }))).toEqual(["Ficciones"]);
-    expect(matchBooks(books, { kind: "position", field: "isbn", text: "9780000000099" })).toEqual([]);
-  });
-
-  it("matches internal code exactly", () => {
-    expect(titles(matchBooks(books, { kind: "position", field: "code", text: "3" }))).toEqual(["La casa de los espíritus"]);
     expect(matchBooks(books, { kind: "position", field: "code", text: "33" })).toEqual([]);
   });
 });
 
-describe("matchBooks — contains search", () => {
-  it("finds a word anywhere in the field", () => {
-    const query: SearchQuery = { kind: "contains", criteria: [{ field: "title", text: "casa" }] };
-    expect(titles(matchBooks(books, query))).toEqual(["Casa tomada y otros cuentos", "La casa de los espíritus"]);
-  });
-
+describe("matchBooks — legacy + shortcut", () => {
   it("requires every combined criterion to match", () => {
     const query: SearchQuery = {
       kind: "contains",
@@ -86,29 +83,23 @@ describe("matchBooks — contains search", () => {
     };
     expect(titles(matchBooks(books, query))).toEqual(["Cuentos completos"]);
   });
+});
 
-  it("is accent insensitive", () => {
-    const query: SearchQuery = { kind: "contains", criteria: [{ field: "title", text: "ESPIRITUS" }] };
-    expect(titles(matchBooks(books, query))).toEqual(["La casa de los espíritus"]);
+describe("matchBooks — ISBN", () => {
+  it("matches the exact ISBN", () => {
+    expect(titles(matchBooks(books, { kind: "isbn", isbn: "9780000000001" }))).toEqual(["Rayuela"]);
   });
 });
 
-describe("matchBooks — barcode", () => {
-  it("searches by ISBN", () => {
-    expect(titles(matchBooks(books, { kind: "barcode", isbn: "9780000000001" }))).toEqual(["Rayuela"]);
-  });
-});
-
-describe("filterByAvailability", () => {
-  it("keeps everything for all", () => {
-    expect(filterByAvailability(books, "all")).toHaveLength(6);
-  });
-
-  it("keeps only immediate availability", () => {
-    expect(filterByAvailability(books, "immediate").map((b) => b.code)).toEqual(["1", "4", "5", "6"]);
-  });
-
-  it("keeps immediate and on-order, dropping out of stock", () => {
-    expect(filterByAvailability(books, "immediate_and_on_order").map((b) => b.code)).toEqual(["1", "2", "4", "5", "6"]);
+describe("sortBooksByTitle", () => {
+  it("orders accent-insensitively by title", () => {
+    expect(titles(sortBooksByTitle(books))).toEqual([
+      "Casa tomada y otros cuentos",
+      "Cien años de soledad",
+      "Cuentos completos",
+      "Ficciones",
+      "La casa de los espíritus",
+      "Rayuela",
+    ]);
   });
 });

@@ -1,118 +1,177 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { addToOrderAction } from "@/modules/order/ui/actions";
 import { AddToOrderFlow } from "@/modules/order/ui/AddToOrderFlow";
-import { normalizeText } from "@/shared/lib/text";
 import { Button } from "@/shared/ui/Button";
 import { Card, CardBody, CardHeader } from "@/shared/ui/Card";
-import { Input } from "@/shared/ui/Input";
-import { SegmentedControl } from "@/shared/ui/SegmentedControl";
+import { Notice } from "@/shared/ui/Notice";
 import type { BookView } from "../application/book-view";
-import type { AvailabilityFilter } from "../domain/book";
+import type { CatalogFacets } from "../application/catalog-repository";
+import { activeFilterCount, NO_FILTERS, type SearchFilters } from "../domain/search-filters";
 import { searchBooksAction } from "./actions";
+import { ActiveFilterChips, BookFilters, type FilterChange } from "./BookFilters";
 import { BookResultsTable } from "./BookResultsTable";
 import { BookSheet } from "./BookSheet";
-import { AVAILABILITY_FILTER_OPTIONS } from "./messages";
 import { SearchBox } from "./SearchBox";
+
+/** Typed filters (Autor, Editorial) search after this pause; discrete choices search at once. */
+const TYPING_DEBOUNCE_MS = 400;
 
 interface Results {
   query: string;
+  filters: SearchFilters;
   items: BookView[];
   total: number;
   nextOffset: number | null;
+  notice: string | null;
 }
 
-export function LibrosContainer({ suspended }: { suspended: boolean }) {
+function resultsSubtitle({ query, filters, total }: Results): string {
+  const count = `${total} ${total === 1 ? "título" : "títulos"}`;
+  const forQuery = query ? ` para “${query}”` : "";
+  const filterCount = activeFilterCount(filters);
+  const withFilters = filterCount > 0 ? ` · ${filterCount} ${filterCount === 1 ? "filtro" : "filtros"}` : "";
+  return `${count}${forQuery}${withFilters}`;
+}
+
+export function LibrosContainer({ suspended, facets }: { suspended: boolean; facets: CatalogFacets }) {
   const [query, setQuery] = useState("");
-  const [availability, setAvailability] = useState<AvailabilityFilter>("all");
+  const [filters, setFilters] = useState<SearchFilters>(NO_FILTERS);
   const [results, setResults] = useState<Results | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [publisherFilter, setPublisherFilter] = useState("");
   const [selected, setSelected] = useState<BookView | null>(null);
   const [pending, startTransition] = useTransition();
+  const queryRef = useRef(query);
+  const latestRequest = useRef(0);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const runSearch = (text: string, filter: AvailabilityFilter, offset: number) => {
+  const cancelTyping = () => {
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = null;
+  };
+
+  useEffect(() => cancelTyping, []);
+
+  const runSearch = (text: string, activeFilters: SearchFilters, offset: number) => {
+    cancelTyping();
+    const requestId = ++latestRequest.current;
     startTransition(async () => {
-      const response = await searchBooksAction({ query: text, availability: filter, offset });
+      const response = await searchBooksAction({ query: text, filters: activeFilters, offset });
+      // A newer search (e.g. another filter click) superseded this one: drop the stale response.
+      if (requestId !== latestRequest.current) return;
       if (!response.ok) {
         setError(response.message);
         return;
       }
       setError(null);
       setResults((previous) => ({
-        query: text,
+        query: text.trim(),
+        filters: activeFilters,
         items: offset > 0 && previous ? [...previous.items, ...response.items] : response.items,
         total: response.total,
         nextOffset: response.nextOffset,
+        notice: response.notice,
       }));
-      if (offset === 0) setPublisherFilter("");
     });
   };
 
-  const visible = useMemo(() => {
-    if (!results) return [];
-    const needle = normalizeText(publisherFilter);
-    return needle ? results.items.filter((book) => normalizeText(book.publisher).includes(needle)) : results.items;
-  }, [results, publisherFilter]);
+  const changeQuery = (value: string) => {
+    queryRef.current = value;
+    setQuery(value);
+  };
+
+  const changeFilters: FilterChange = (next, { immediate }) => {
+    setFilters(next);
+    cancelTyping();
+    if (queryRef.current.trim() === "" && activeFilterCount(next) === 0) {
+      latestRequest.current += 1;
+      setResults(null);
+      setError(null);
+      return;
+    }
+    if (immediate) runSearch(queryRef.current, next, 0);
+    else typingTimer.current = setTimeout(() => runSearch(queryRef.current, next, 0), TYPING_DEBOUNCE_MS);
+  };
+
+  const hasFilters = activeFilterCount(filters) > 0;
 
   return (
     <div className="space-y-4">
       <Card>
-        <CardBody>
+        <CardBody className="space-y-4">
           <SearchBox
             value={query}
-            onChange={setQuery}
-            onSubmit={() => runSearch(query, availability, 0)}
+            onChange={changeQuery}
+            onSubmit={() => runSearch(query, filters, 0)}
             pending={pending}
             error={error}
           />
+          <div className="border-t border-line pt-4">
+            <BookFilters value={filters} onChange={changeFilters} facets={facets} />
+          </div>
         </CardBody>
       </Card>
 
       {results ? (
         <Card>
-          <CardHeader
-            title="Resultados"
-            subtitle={`${results.total} ${results.total === 1 ? "título" : "títulos"} para “${results.query}”`}
-          />
-          <div className="flex flex-col gap-3 border-b border-line px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
-            <SegmentedControl
-              label="Disponibilidad"
-              options={AVAILABILITY_FILTER_OPTIONS}
-              value={availability}
-              disabled={pending}
-              onChange={(value) => {
-                setAvailability(value);
-                runSearch(results.query, value, 0);
-              }}
+          <div aria-busy={pending}>
+            <CardHeader
+              title="Resultados"
+              subtitle={resultsSubtitle(results)}
+              actions={
+                pending ? (
+                  <span role="status" className="text-xs text-ink-muted">
+                    Actualizando…
+                  </span>
+                ) : null
+              }
             />
-            <div className="w-full lg:w-64">
-              <label htmlFor="publisher-filter" className="sr-only">
-                Filtrar editorial
-              </label>
-              <Input
-                id="publisher-filter"
-                value={publisherFilter}
-                onChange={(event) => setPublisherFilter(event.target.value)}
-                placeholder="Filtrar editorial…"
-                className="h-9"
+            {hasFilters || results.notice ? (
+              <div className="space-y-3 border-b border-line px-4 py-3 sm:px-5">
+                <ActiveFilterChips value={filters} onChange={changeFilters} />
+                {results.notice ? <Notice tone="info">{results.notice}</Notice> : null}
+              </div>
+            ) : null}
+            <div className={pending ? "opacity-60 transition-opacity motion-reduce:transition-none" : undefined}>
+              <BookResultsTable
+                books={results.items}
+                onOpen={setSelected}
+                empty={
+                  hasFilters ? (
+                    <div className="space-y-3">
+                      <p>No hay libros que cumplan todos los filtros. Probá quitando alguno.</p>
+                      <Button variant="secondary" size="lg" onClick={() => changeFilters(NO_FILTERS, { immediate: true })}>
+                        Limpiar filtros
+                      </Button>
+                    </div>
+                  ) : undefined
+                }
               />
             </div>
+            {results.items.length > 0 ? (
+              <div className="flex flex-col items-center gap-2 border-t border-line p-4">
+                <p className="text-xs text-ink-muted tabular-nums">
+                  Mostrando {results.items.length} de {results.total}
+                </p>
+                {results.nextOffset !== null ? (
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    disabled={pending}
+                    onClick={() => runSearch(results.query, results.filters, results.nextOffset ?? 0)}
+                  >
+                    {pending ? "Buscando…" : "Mostrar más resultados"}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-          <BookResultsTable books={visible} onOpen={setSelected} />
-          {results.nextOffset !== null ? (
-            <div className="flex justify-center border-t border-line p-4">
-              <Button variant="secondary" disabled={pending} onClick={() => runSearch(results.query, availability, results.nextOffset ?? 0)}>
-                {pending ? "Buscando…" : "Buscar más resultados"}
-              </Button>
-            </div>
-          ) : null}
         </Card>
       ) : (
         <p className="px-1 text-sm text-ink-muted">
-          Empezá con la letra del criterio y el texto, todo junto: <span className="font-mono text-ink">TCASA</span>,{" "}
-          <span className="font-mono text-ink">ABORGES</span> o <span className="font-mono text-ink">+TCUENTOS +AQUIROGA</span>.
+          Escribí lo que sepas, por ejemplo <span className="text-ink">cien años</span> o{" "}
+          <span className="text-ink">borges aleph</span>, o elegí filtros para recorrer el catálogo.
         </p>
       )}
 

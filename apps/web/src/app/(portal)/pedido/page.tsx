@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Pedido" };
 export default async function PedidoPage() {
   return (
     <>
-      <PageHeader title="Pedido" description="Tu pedido en curso. Tocá Modificar para agregar, quitar o corregir cantidades." />
+      <PageHeader title="Pedido" description="Revisá tu pedido en curso: ajustá cantidades, quitá títulos y despachalo cuando esté listo." />
       <PedidoPageContainer context={await requirePortalContext()} />
     </>
   );
