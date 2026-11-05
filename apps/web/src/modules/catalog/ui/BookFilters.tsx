@@ -26,6 +26,11 @@ export function BookFilters({ value, onChange, facets, disabled }: BookFiltersPr
   const id = useId();
   const panelId = `${id}-panel`;
   const count = activeFilterCount(value);
+  // Hide controls with nothing to choose from (the real catalog has no subjects or
+  // promotions, and only lists immediately available books).
+  const showSubject = facets.subjects.length > 0;
+  const showPromotion = facets.hasPromotions;
+  const showAvailability = facets.availabilities.length > 1;
   const set = <K extends keyof SearchFilters>(key: K, next: SearchFilters[K], immediate: boolean) =>
     onChange({ ...value, [key]: next }, { immediate });
 
@@ -84,49 +89,55 @@ export function BookFilters({ value, onChange, facets, disabled }: BookFiltersPr
           </datalist>
         </div>
 
-        <div>
-          <Label htmlFor={`${id}-subject`}>Materia</Label>
-          <select
-            id={`${id}-subject`}
-            value={value.subject}
-            disabled={disabled}
-            onChange={(event) => set("subject", event.target.value, true)}
-            className="h-11 w-full rounded-lg border border-line bg-surface px-3 text-base text-ink sm:text-sm focus:border-brand-600 focus:ring-2 focus:ring-brand-100 focus:outline-none disabled:bg-subtle"
-          >
-            <option value="">Todas</option>
-            {facets.subjects.map((subject) => (
-              <option key={subject} value={subject}>
-                {subject}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex items-end">
-          <label className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-lg border border-line bg-surface px-3 text-sm text-ink hover:bg-subtle">
-            <input
-              type="checkbox"
-              checked={value.promotionOnly}
+        {showSubject ? (
+          <div>
+            <Label htmlFor={`${id}-subject`}>Materia</Label>
+            <select
+              id={`${id}-subject`}
+              value={value.subject}
               disabled={disabled}
-              onChange={(event) => set("promotionOnly", event.target.checked, true)}
-              className="size-4 accent-brand-600"
-            />
-            Solo con promoción
-          </label>
-        </div>
+              onChange={(event) => set("subject", event.target.value, true)}
+              className="h-11 w-full rounded-lg border border-line bg-surface px-3 text-base text-ink sm:text-sm focus:border-brand-600 focus:ring-2 focus:ring-brand-100 focus:outline-none disabled:bg-subtle"
+            >
+              <option value="">Todas</option>
+              {facets.subjects.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
-        <div className="sm:col-span-2 lg:col-span-4">
-          <p className="mb-1.5 text-sm font-medium text-ink" aria-hidden>
-            Disponibilidad
-          </p>
-          <SegmentedControl
-            label="Disponibilidad"
-            options={AVAILABILITY_FILTER_OPTIONS}
-            value={value.availability}
-            disabled={disabled}
-            onChange={(next) => set("availability", next, true)}
-          />
-        </div>
+        {showPromotion ? (
+          <div className="flex items-end">
+            <label className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-lg border border-line bg-surface px-3 text-sm text-ink hover:bg-subtle">
+              <input
+                type="checkbox"
+                checked={value.promotionOnly}
+                disabled={disabled}
+                onChange={(event) => set("promotionOnly", event.target.checked, true)}
+                className="size-4 accent-brand-600"
+              />
+              Solo con promoción
+            </label>
+          </div>
+        ) : null}
+
+        {showAvailability ? (
+          <div className="sm:col-span-2 lg:col-span-4">
+            <p className="mb-1.5 text-sm font-medium text-ink" aria-hidden>
+              Disponibilidad
+            </p>
+            <SegmentedControl
+              label="Disponibilidad"
+              options={AVAILABILITY_FILTER_OPTIONS}
+              value={value.availability}
+              disabled={disabled}
+              onChange={(next) => set("availability", next, true)}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

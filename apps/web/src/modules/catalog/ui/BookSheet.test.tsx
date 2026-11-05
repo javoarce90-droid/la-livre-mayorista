@@ -45,6 +45,18 @@ describe("BookSheet", () => {
     expect(add.closest("footer")).not.toBeNull();
   });
 
+  it("hides technical rows and the review when the data is missing", () => {
+    const sparse = toBookView(
+      makeBook({ subject: null, recommendedAge: null, year: null, language: null, pages: null, review: null }),
+      10,
+    );
+    render(<BookSheet book={sparse} onClose={() => {}} />);
+    expect(screen.getByText("EAN")).toBeTruthy();
+    for (const label of ["Materia", "Edad recomendada", "Año de edición", "Idioma", "Páginas", "Reseña"]) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
+  });
+
   it("renders no footer when opened read-only", () => {
     render(<BookSheet book={book} onClose={() => {}} />);
     expect(screen.getByRole("dialog").querySelector("footer")).toBeNull();

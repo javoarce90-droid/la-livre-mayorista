@@ -11,7 +11,7 @@ export interface Promotion {
 }
 
 export interface Book {
-  /** Internal code (SKU). */
+  /** Internal code (SKU). Books from the La Livre API use the ISBN. */
   code: string;
   /** ISBN-13 / EAN, digits only. */
   isbn: string;
@@ -21,15 +21,17 @@ export interface Book {
   publisher: string;
   /** PVP (list price) in cents. */
   listPrice: number;
-  /** ISO date since which the list price applies. */
+  /** ISO date since which the list price applies (the supplier feed date for real books). */
   priceDate: string;
   /** Recommended age such as "+12", or null when the publisher does not report it. */
   recommendedAge: string | null;
+  /** Real books are always "immediate": the API only lists immediately available ones. */
   availability: Availability;
-  subject: string;
-  year: number;
-  language: string;
-  pages: number;
-  review: string;
+  /** Null when the source does not report it (the real catalog has no subjects). */
+  subject: string | null;
+  year: number | null;
+  language: string | null;
+  pages: number | null;
+  review: string | null;
   promotion: Promotion | null;
 }
