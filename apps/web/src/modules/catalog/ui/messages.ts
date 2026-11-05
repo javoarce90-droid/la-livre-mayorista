@@ -18,6 +18,10 @@ export function availabilityFilterLabel(filter: AvailabilityFilter): string {
   return AVAILABILITY_FILTER_OPTIONS.find((option) => option.value === filter)?.label ?? filter;
 }
 
+/** Shown when the API cannot price the catalog (e.g. no exchange rate loaded yet). */
+export const CATALOG_UNAVAILABLE_MESSAGE =
+  "El catálogo no está disponible en este momento. Probá de nuevo en unos minutos.";
+
 export function searchErrorMessage(error: SearchQueryError): string {
   switch (error) {
     case "empty":

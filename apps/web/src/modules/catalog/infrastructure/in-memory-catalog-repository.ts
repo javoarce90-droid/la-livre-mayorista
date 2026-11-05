@@ -1,8 +1,10 @@
 import type { CatalogFacets, CatalogRepository, SearchPage } from "../application/catalog-repository";
-import type { Book } from "../domain/book";
+import type { Availability, Book } from "../domain/book";
 import { applyFilters, type SearchFilters } from "../domain/search-filters";
 import { matchBooks, sortBooksByTitle } from "../domain/search-matching";
 import type { SearchQuery } from "../domain/search-query";
+
+const AVAILABILITY_ORDER: readonly Availability[] = ["immediate", "on_order", "out_of_stock"];
 
 const byName = (a: string, b: string) => a.localeCompare(b, "es", { sensitivity: "base" });
 
@@ -22,7 +24,11 @@ export class InMemoryCatalogRepository implements CatalogRepository {
   async facets(): Promise<CatalogFacets> {
     return {
       publishers: [...new Set(this.books.map((book) => book.publisher))].sort(byName),
-      subjects: [...new Set(this.books.map((book) => book.subject))].sort(byName),
+      subjects: [...new Set(this.books.flatMap((book) => (book.subject ? [book.subject] : [])))].sort(byName),
+      availabilities: AVAILABILITY_ORDER.filter((availability) =>
+        this.books.some((book) => book.availability === availability),
+      ),
+      hasPromotions: this.books.some((book) => book.promotion !== null),
     };
   }
 

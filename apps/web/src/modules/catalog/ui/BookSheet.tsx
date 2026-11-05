@@ -55,15 +55,18 @@ export function BookSheet({ book, onClose, addSlot }: BookSheetProps) {
   const [pvpMode, setPvpMode] = usePvpMode();
   const toast = useToast();
 
-  const technical: [string, ReactNode][] = [
-    ["EAN", book.isbn],
-    ["Editorial", book.publisher],
-    ["Año de edición", book.year],
-    ["Idioma", book.language],
-    ["Materia", book.subject],
-    ["Edad recomendada", book.recommendedAge ?? "—"],
-    ["Páginas", book.pages],
-  ];
+  // Rows without data are hidden rather than shown as "—" (the real catalog lacks several fields).
+  const technical = (
+    [
+      ["EAN", book.isbn],
+      ["Editorial", book.publisher],
+      ["Año de edición", book.year],
+      ["Idioma", book.language],
+      ["Materia", book.subject],
+      ["Edad recomendada", book.recommendedAge],
+      ["Páginas", book.pages],
+    ] satisfies [string, ReactNode][]
+  ).filter(([, value]) => value !== null && value !== "");
 
   return (
     <Modal
@@ -126,12 +129,14 @@ export function BookSheet({ book, onClose, addSlot }: BookSheetProps) {
         </section>
       </div>
 
-      <section aria-labelledby={`review-${book.code}`} className="mt-6 border-t border-line pt-4">
-        <h4 id={`review-${book.code}`} className={sectionTitle}>
-          Reseña
-        </h4>
-        <p className="mt-2 text-sm leading-relaxed text-ink">{book.review}</p>
-      </section>
+      {book.review ? (
+        <section aria-labelledby={`review-${book.code}`} className="mt-6 border-t border-line pt-4">
+          <h4 id={`review-${book.code}`} className={sectionTitle}>
+            Reseña
+          </h4>
+          <p className="mt-2 text-sm leading-relaxed text-ink">{book.review}</p>
+        </section>
+      ) : null}
     </Modal>
   );
 }

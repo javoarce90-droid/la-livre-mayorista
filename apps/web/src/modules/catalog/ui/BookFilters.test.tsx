@@ -5,9 +5,32 @@ import { useState } from "react";
 import { NO_FILTERS, type SearchFilters } from "../domain/search-filters";
 import { ActiveFilterChips, BookFilters, type FilterChange } from "./BookFilters";
 
-const facets = { publishers: ["Alfaguara", "Anagrama"], subjects: ["Cuentos", "Narrativa"] };
+import type { CatalogFacets } from "../application/catalog-repository";
 
-function Harness({ onChange, initial = NO_FILTERS }: { onChange: FilterChange; initial?: SearchFilters }) {
+const facets: CatalogFacets = {
+  publishers: ["Alfaguara", "Anagrama"],
+  subjects: ["Cuentos", "Narrativa"],
+  availabilities: ["immediate", "on_order", "out_of_stock"],
+  hasPromotions: true,
+};
+
+/** What the La Livre API reports: no subjects, everything available, no promotions. */
+const realCatalogFacets: CatalogFacets = {
+  publishers: ["Anagrama", "Paidós"],
+  subjects: [],
+  availabilities: ["immediate"],
+  hasPromotions: false,
+};
+
+function Harness({
+  onChange,
+  initial = NO_FILTERS,
+  facetValues = facets,
+}: {
+  onChange: FilterChange;
+  initial?: SearchFilters;
+  facetValues?: CatalogFacets;
+}) {
   const [value, setValue] = useState(initial);
   const change: FilterChange = (next, options) => {
     setValue(next);
@@ -15,7 +38,7 @@ function Harness({ onChange, initial = NO_FILTERS }: { onChange: FilterChange; i
   };
   return (
     <>
-      <BookFilters value={value} onChange={change} facets={facets} />
+      <BookFilters value={value} onChange={change} facets={facetValues} />
       <ActiveFilterChips value={value} onChange={change} />
     </>
   );
@@ -46,6 +69,15 @@ describe("BookFilters", () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.anything(), { immediate: false });
     fireEvent.change(screen.getByLabelText("Editorial"), { target: { value: "Anagrama" } });
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ publisher: "Anagrama" }), { immediate: true });
+  });
+
+  it("hides filters with nothing to choose from (real catalog data)", () => {
+    render(<Harness onChange={vi.fn()} facetValues={realCatalogFacets} />);
+    expect(screen.getByLabelText("Autor")).toBeTruthy();
+    expect(screen.getByLabelText("Editorial")).toBeTruthy();
+    expect(screen.queryByLabelText("Materia")).toBeNull();
+    expect(screen.queryByLabelText("Solo con promoción")).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Solo disponibles" })).toBeNull();
   });
 
   it("shows the active filter count on the mobile toggle", () => {

@@ -31,6 +31,12 @@ const COLUMNS: DataColumn<BookView>[] = [
   },
 ];
 
+/** Optional columns are dropped when no book on screen has the data (e.g. the real catalog has no age or subject). */
+const OPTIONAL_COLUMNS: Partial<Record<string, (book: BookView) => boolean>> = {
+  age: (book) => book.recommendedAge !== null,
+  subject: (book) => book.subject !== null,
+};
+
 export function BookResultsTable({
   books,
   onOpen,
@@ -43,7 +49,10 @@ export function BookResultsTable({
   return (
     <DataTable
       caption="Resultados de la búsqueda"
-      columns={COLUMNS}
+      columns={COLUMNS.filter((column) => {
+        const hasData = OPTIONAL_COLUMNS[column.key];
+        return !hasData || books.some(hasData);
+      })}
       rows={books}
       getRowKey={(book) => book.code}
       onRowClick={onOpen}

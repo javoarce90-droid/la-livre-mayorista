@@ -76,7 +76,7 @@ export function filterByAvailability<T extends { availability: Availability }>(
 export function matchesFilters(book: Book, filters: SearchFilters): boolean {
   if (filters.author && !containsWords(book.author, filters.author)) return false;
   if (filters.publisher && !containsWords(book.publisher, filters.publisher)) return false;
-  if (filters.subject && normalizeText(book.subject) !== normalizeText(filters.subject)) return false;
+  if (filters.subject && normalizeText(book.subject ?? "") !== normalizeText(filters.subject)) return false;
   if (!ALLOWED[filters.availability].includes(book.availability)) return false;
   if (filters.promotionOnly && !book.promotion) return false;
   return true;
