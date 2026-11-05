@@ -1,4 +1,5 @@
-import type { Prisma, PrismaClient } from '../../generated/prisma/client.js';
+import { Prisma } from '../../generated/prisma/client.js';
+import type { PrismaClient } from '../../generated/prisma/client.js';
 import type { CatalogEntry } from '../domain/catalog-entry.js';
 import { AZETA_SUPPLIER } from '../domain/catalog-entry.js';
 import { PrismaCatalogWriter } from './prisma-catalog-writer.js';
@@ -35,6 +36,31 @@ function entry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
   };
 }
 
+interface KnownPublisher {
+  id: number;
+  code: string;
+  name: string;
+  brand: string | null;
+  listPriceDiscountPercent: Prisma.Decimal | null;
+}
+
+function known(
+  id: number,
+  code: string,
+  name: string,
+  brand: string | null = null,
+  percent: string | null = null,
+): KnownPublisher {
+  return {
+    id,
+    code,
+    name,
+    brand,
+    listPriceDiscountPercent:
+      percent === null ? null : new Prisma.Decimal(percent),
+  };
+}
+
 interface Statement {
   sql: string;
   values: unknown[];
@@ -43,7 +69,7 @@ interface Statement {
 /** Minimal stand-in for the PrismaClient surface used by the writer. */
 function fakePrisma(options: {
   pricingRules?: number;
-  publishers?: { id: number; code: string; name: string }[];
+  publishers?: KnownPublisher[];
 }) {
   const statements: Statement[] = [];
   let nextPublisherId = 100;
@@ -122,8 +148,8 @@ describe('PrismaCatalogWriter', () => {
       expect(fake.prisma.pricingRule.create).toHaveBeenCalledWith({
         data: {
           name: 'default',
-          basis: 'MARKUP_ON_COST',
-          percent: '20.00',
+          basis: 'ADJUSTMENT_ON_LIST_PRICE',
+          percent: '0.00',
           isActive: true,
         },
       });
@@ -168,9 +194,18 @@ describe('PrismaCatalogWriter', () => {
 
       const publishers = fake.statements[0];
       expect(publishers.sql).toContain('INSERT INTO "Publisher"');
-      expect(publishers.sql).toContain('ON CONFLICT ("supplierId", "code")');
+      expect(publishers.sql).toContain(
+        'ON CONFLICT ("supplierId", "code") DO UPDATE SET "name" = EXCLUDED."name", "brand" = EXCLUDED."brand", "listPriceDiscountPercent" = EXCLUDED."listPriceDiscountPercent"',
+      );
       expect(publishers.values[0]).toBe(7);
-      expect(rows(publishers)).toEqual([{ code: 'J70', name: 'DEBOLSILLO' }]);
+      expect(rows(publishers)).toEqual([
+        {
+          code: 'J70',
+          name: 'DEBOLSILLO',
+          brand: 'Debolsillo',
+          listPriceDiscountPercent: '35.00',
+        },
+      ]);
 
       const books = fake.statements[1];
       expect(books.sql).toContain('INSERT INTO "Book"');
@@ -234,8 +269,8 @@ describe('PrismaCatalogWriter', () => {
     it('reuses known publishers and only upserts new or renamed ones', async () => {
       const fake = fakePrisma({
         publishers: [
-          { id: 1, code: 'J70', name: 'DEBOLSILLO' },
-          { id: 2, code: 'Z98', name: 'OLD NAME' },
+          known(1, 'J70', 'DEBOLSILLO', 'Debolsillo', '35.00'),
+          known(2, 'Z98', 'OLD NAME'),
         ],
       });
       const writer = new PrismaCatalogWriter(fake.client);
@@ -252,7 +287,12 @@ describe('PrismaCatalogWriter', () => {
 
       const publishers = find(fake.statements, 'INSERT INTO "Publisher"');
       expect(rows(publishers)).toEqual([
-        { code: 'Z98', name: 'MANUAL MODERNO' },
+        {
+          code: 'Z98',
+          name: 'MANUAL MODERNO',
+          brand: null,
+          listPriceDiscountPercent: null,
+        },
       ]);
       const books = find(fake.statements, 'INSERT INTO "Book"');
       expect(rows(books).map((b) => b.publisherId)).toEqual([1, 100, null]);
@@ -270,7 +310,7 @@ describe('PrismaCatalogWriter', () => {
 
     it('keeps the last occurrence of a duplicated ISBN and skips empty statements', async () => {
       const fake = fakePrisma({
-        publishers: [{ id: 1, code: 'J70', name: 'DEBOLSILLO' }],
+        publishers: [known(1, 'J70', 'DEBOLSILLO', 'Debolsillo', '35.00')],
       });
       const writer = new PrismaCatalogWriter(fake.client);
       await writer.prepare({ supplier: AZETA_SUPPLIER, sourceSentAt: SENT_AT });
@@ -288,6 +328,59 @@ describe('PrismaCatalogWriter', () => {
           s.sql.trim().split(' ').slice(0, 3).join(' '),
         ),
       ).toEqual(['INSERT INTO "Book"', 'DELETE FROM "BookContributor"']);
+    });
+
+    it('re-upserts a known publisher whose brand or discount is out of sync with the configuration', async () => {
+      const fake = fakePrisma({
+        publishers: [known(1, 'J70', 'DEBOLSILLO', 'Debolsillo', '30.00')],
+      });
+      const writer = new PrismaCatalogWriter(fake.client);
+      await writer.prepare({ supplier: AZETA_SUPPLIER, sourceSentAt: SENT_AT });
+
+      await writer.writeBatch([entry()]);
+
+      expect(rows(find(fake.statements, 'INSERT INTO "Publisher"'))).toEqual([
+        {
+          code: 'J70',
+          name: 'DEBOLSILLO',
+          brand: 'Debolsillo',
+          listPriceDiscountPercent: '35.00',
+        },
+      ]);
+      expect(fake.prisma.publisher.findMany).toHaveBeenCalledWith({
+        where: { supplierId: 7 },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          brand: true,
+          listPriceDiscountPercent: true,
+        },
+      });
+    });
+
+    it('never applies the Azeta publisher discounts to another supplier', async () => {
+      const fake = fakePrisma({});
+      const writer = new PrismaCatalogWriter(fake.client);
+      await writer.prepare({
+        supplier: {
+          code: 'CELESA',
+          name: 'CELESA',
+          listPriceDiscountPercent: '20.00',
+        },
+        sourceSentAt: SENT_AT,
+      });
+
+      await writer.writeBatch([entry()]);
+
+      expect(rows(find(fake.statements, 'INSERT INTO "Publisher"'))).toEqual([
+        {
+          code: 'J70',
+          name: 'DEBOLSILLO',
+          brand: null,
+          listPriceDiscountPercent: null,
+        },
+      ]);
     });
   });
 });

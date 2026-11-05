@@ -20,7 +20,10 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:validate": "prisma validate",
-    "import:onix": "nest build && node dist/catalog-import/cli/main.js"
+    "import:onix": "nest build && node dist/catalog-import/cli/main.js",
+    "catalog:apply-discounts": "nest build && node dist/catalog-import/cli/apply-publisher-discounts.js",
+    "pricing:set-rate": "nest build && node dist/pricing/cli/set-exchange-rate.js",
+    "pricing:set-rule": "nest build && node dist/pricing/cli/set-pricing-rule.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",

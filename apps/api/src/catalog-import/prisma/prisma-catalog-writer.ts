@@ -1,25 +1,42 @@
 import { Prisma } from '../../generated/prisma/client.js';
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import type { CatalogEntry } from '../domain/catalog-entry.js';
+import {
+  AZETA_PUBLISHER_DISCOUNTS,
+  resolvePublisherDiscount,
+} from '../domain/publisher-discounts.js';
+import type {
+  PublisherDiscountConfig,
+  ResolvedPublisherDiscount,
+} from '../domain/publisher-discounts.js';
 import type { CatalogWriter, ImportContext } from '../ports/catalog-writer.js';
 
 type Transaction = Pick<PrismaClient, '$executeRaw' | '$queryRaw'>;
 
-interface CachedPublisher {
-  id: number;
+interface PublisherRow {
   name: string;
+  brand: string | null;
+  /** Two-decimal string, e.g. "35.00". */
+  listPriceDiscountPercent: string | null;
+}
+
+interface CachedPublisher extends PublisherRow {
+  id: number;
 }
 
 interface Session {
   supplierId: number;
+  /** Publisher discounts of the supplier being imported, if any. */
+  publisherDiscounts: PublisherDiscountConfig | null;
   /** "YYYY-MM-DD HH:MM:SS.mmm" in UTC, the format of TIMESTAMP(3) columns. */
   sourceSentAt: string;
 }
 
 export const DEFAULT_PRICING_RULE = {
   name: 'default',
-  basis: 'MARKUP_ON_COST',
-  percent: '20.00',
+  // Sell at the list price excluding tax until the owner adjusts it.
+  basis: 'ADJUSTMENT_ON_LIST_PRICE',
+  percent: '0.00',
   isActive: true,
 } as const;
 
@@ -65,6 +82,9 @@ const OFFER_UPDATED_COLUMNS = OFFER_COLUMNS.slice(2).map(([name]) => name);
  * `jsonb_to_recordset`), so the number of round trips does not depend on the
  * batch size. This keeps imports fast over a remote pooled connection.
  *
+ * Publisher brand and discount always follow the versioned configuration
+ * (on insert and update), so re-imports keep them in sync.
+ *
  * Never touched: supplier settings of an existing supplier, existing pricing
  * rules, and the offer fields managed by La Livre (net cost, sale override).
  */
@@ -75,6 +95,7 @@ export class PrismaCatalogWriter implements CatalogWriter {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly transactionTimeoutMs = 120_000,
+    private readonly publisherDiscounts: PublisherDiscountConfig = AZETA_PUBLISHER_DISCOUNTS,
   ) {}
 
   async prepare(context: ImportContext): Promise<void> {
@@ -96,15 +117,31 @@ export class PrismaCatalogWriter implements CatalogWriter {
 
     const publishers = await this.prisma.publisher.findMany({
       where: { supplierId },
-      select: { id: true, code: true, name: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        brand: true,
+        listPriceDiscountPercent: true,
+      },
     });
     this.publishers.clear();
     for (const p of publishers) {
-      this.publishers.set(p.code, { id: p.id, name: p.name });
+      this.publishers.set(p.code, {
+        id: p.id,
+        name: p.name,
+        brand: p.brand,
+        listPriceDiscountPercent:
+          p.listPriceDiscountPercent?.toFixed(2) ?? null,
+      });
     }
 
     this.session = {
       supplierId,
+      publisherDiscounts:
+        this.publisherDiscounts.supplierCode === supplier.code
+          ? this.publisherDiscounts
+          : null,
       sourceSentAt: context.sourceSentAt
         .toISOString()
         .replace('T', ' ')
@@ -121,9 +158,14 @@ export class PrismaCatalogWriter implements CatalogWriter {
     const entries = [...new Map(batch.map((e) => [e.isbn13, e])).values()];
     if (entries.length === 0) return;
 
+    const publishers = this.publisherRows(session, entries);
     const resolved = await this.prisma.$transaction(
       async (tx) => {
-        const publisherIds = await this.upsertPublishers(tx, session, entries);
+        const publisherIds = await this.upsertPublishers(
+          tx,
+          session,
+          publishers,
+        );
         await this.upsertBooks(tx, entries, publisherIds);
         await this.replaceContributors(tx, entries);
         await this.upsertOffers(tx, session, entries);
@@ -133,41 +175,57 @@ export class PrismaCatalogWriter implements CatalogWriter {
     );
 
     // Only cache publishers once the transaction is committed.
-    for (const e of entries) {
-      const id = e.publisher && resolved.get(e.publisher.code);
-      if (e.publisher && id !== undefined && id !== null) {
-        this.publishers.set(e.publisher.code, { id, name: e.publisher.name });
-      }
+    for (const [code, row] of publishers) {
+      const id = resolved.get(code);
+      if (id !== undefined) this.publishers.set(code, { id, ...row });
     }
+  }
+
+  /** Publisher code → row to persist, for every publisher of the batch. */
+  private publisherRows(
+    session: Session,
+    entries: CatalogEntry[],
+  ): Map<string, PublisherRow> {
+    const rows = new Map<string, PublisherRow>();
+    for (const { publisher } of entries) {
+      if (publisher === null) continue;
+      const discount: ResolvedPublisherDiscount | null =
+        session.publisherDiscounts &&
+        resolvePublisherDiscount(publisher.name, session.publisherDiscounts);
+      rows.set(publisher.code, {
+        name: publisher.name,
+        brand: discount?.brand ?? null,
+        listPriceDiscountPercent: discount?.percent ?? null,
+      });
+    }
+    return rows;
   }
 
   /** Returns publisher code → id for every publisher of the batch. */
   private async upsertPublishers(
     tx: Transaction,
     session: Session,
-    entries: CatalogEntry[],
+    publishers: Map<string, PublisherRow>,
   ): Promise<Map<string, number>> {
     const ids = new Map<string, number>();
-    const pending = new Map<string, string>();
-    for (const { publisher } of entries) {
-      if (publisher === null) continue;
-      const cached = this.publishers.get(publisher.code);
-      if (cached && cached.name === publisher.name) {
-        ids.set(publisher.code, cached.id);
+    const pending: ({ code: string } & PublisherRow)[] = [];
+    for (const [code, row] of publishers) {
+      const cached = this.publishers.get(code);
+      if (cached && samePublisherRow(cached, row)) {
+        ids.set(code, cached.id);
       } else {
-        pending.set(publisher.code, publisher.name);
+        pending.push({ code, ...row });
       }
     }
-    if (pending.size === 0) return ids;
+    if (pending.length === 0) return ids;
 
-    const json = JSON.stringify(
-      [...pending].map(([code, name]) => ({ code, name })),
-    );
     const rows = await tx.$queryRaw<{ id: number; code: string }[]>(Prisma.sql`
-      INSERT INTO "Publisher" ("supplierId", "code", "name")
-      SELECT ${session.supplierId}::int, r."code", r."name"
-      FROM jsonb_to_recordset(${json}::jsonb) AS r("code" text, "name" text)
-      ON CONFLICT ("supplierId", "code") DO UPDATE SET "name" = EXCLUDED."name"
+      INSERT INTO "Publisher" ("supplierId", "code", "name", "brand", "listPriceDiscountPercent")
+      SELECT ${session.supplierId}::int, r."code", r."name", r."brand", r."listPriceDiscountPercent"
+      FROM jsonb_to_recordset(${JSON.stringify(pending)}::jsonb)
+        AS r("code" text, "name" text, "brand" text, "listPriceDiscountPercent" numeric)
+      ON CONFLICT ("supplierId", "code") DO UPDATE SET "name" = EXCLUDED."name",
+        "brand" = EXCLUDED."brand", "listPriceDiscountPercent" = EXCLUDED."listPriceDiscountPercent"
       RETURNING "id", "code"`);
     for (const row of rows) ids.set(row.code, row.id);
     return ids;
@@ -254,6 +312,14 @@ export class PrismaCatalogWriter implements CatalogWriter {
       ON CONFLICT ("supplierId", "recordReference") DO UPDATE SET ${assignments(OFFER_UPDATED_COLUMNS)},
         "sourceSentAt" = EXCLUDED."sourceSentAt", "updatedAt" = EXCLUDED."updatedAt"`);
   }
+}
+
+function samePublisherRow(a: PublisherRow, b: PublisherRow): boolean {
+  return (
+    a.name === b.name &&
+    a.brand === b.brand &&
+    a.listPriceDiscountPercent === b.listPriceDiscountPercent
+  );
 }
 
 // Identifiers below come from the constant column lists above, never from input.

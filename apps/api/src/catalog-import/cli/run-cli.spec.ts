@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { configuredPublisherNames } from '../domain/publisher-discounts.js';
 import type { CatalogEntry } from '../domain/catalog-entry.js';
 import type { CatalogWriter } from '../ports/catalog-writer.js';
 import { parseCliArgs, runCli } from './run-cli.js';
@@ -78,6 +79,25 @@ describe('parseCliArgs', () => {
     });
   });
 
+  it('--configured-publishers adds every configured name variant to the included publishers', () => {
+    const options = parseCliArgs(
+      [
+        '--file',
+        'x.xml',
+        '--include-publisher',
+        'ALFAGUARA',
+        '--configured-publishers',
+      ],
+      '/data',
+    );
+
+    expect(options.includePublishers).toEqual([
+      'ALFAGUARA',
+      ...configuredPublisherNames(),
+    ]);
+    expect(options.includePublishers).toContain('Ediciones Paidós');
+  });
+
   it.each([
     [[]],
     [['--file', 'x.xml', '--limit', 'abc']],
@@ -131,6 +151,27 @@ describe('runCli', () => {
     expect(included.out()).toMatch(/Selected:\s+1/);
     expect(included.out()).toContain('9786072650688');
     expect(included.out()).not.toContain('"9788466359207"');
+  });
+
+  it('dry-run with --configured-publishers only takes the sellable publishers', async () => {
+    const h = harness();
+
+    await runCli(
+      ['--file', FIXTURE, '--dry-run', '--configured-publishers'],
+      h.deps,
+    );
+
+    expect(h.out()).toMatch(/Selected:\s+1/);
+    expect(h.out()).toContain('9788466359207');
+    expect(h.out()).not.toContain('"9786072650688"');
+  });
+
+  it('documents --configured-publishers in the usage', async () => {
+    const h = harness();
+
+    await runCli([], h.deps);
+
+    expect(h.err()).toContain('--configured-publishers');
   });
 
   it('writes through the writer and always closes it', async () => {

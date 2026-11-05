@@ -19,6 +19,9 @@
     "db:generate": "pnpm --filter @la-livre/api db:generate",
     "db:migrate": "pnpm --filter @la-livre/api db:migrate",
     "db:deploy": "pnpm --filter @la-livre/api db:deploy",
-    "import:onix": "pnpm --filter @la-livre/api import:onix"
+    "import:onix": "pnpm --filter @la-livre/api import:onix",
+    "catalog:apply-discounts": "pnpm --filter @la-livre/api catalog:apply-discounts",
+    "pricing:set-rate": "pnpm --filter @la-livre/api pricing:set-rate",
+    "pricing:set-rule": "pnpm --filter @la-livre/api pricing:set-rule"
   }
 }

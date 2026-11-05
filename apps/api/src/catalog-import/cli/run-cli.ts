@@ -6,6 +6,7 @@ import {
 } from '../application/import-catalog.js';
 import type { ImportSummary } from '../application/import-catalog.js';
 import type { CatalogEntry } from '../domain/catalog-entry.js';
+import { configuredPublisherNames } from '../domain/publisher-discounts.js';
 import { parseOnix } from '../onix/onix-parser.js';
 import type { CatalogWriter } from '../ports/catalog-writer.js';
 import { openCatalogStream } from '../source/open-catalog-stream.js';
@@ -36,6 +37,8 @@ Options:
                                (default: all, or 0 when --include-publisher is used)
   --include-publisher <name>   import all products of this publisher (exact name,
                                case-insensitive); repeatable
+  --configured-publishers      include every publisher name variant configured with
+                               a discount (the sellable publishers)
   --dry-run                    parse and select only; never touches the database
   --batch-size <n>             products per database transaction (default ${DEFAULT_BATCH_SIZE})`;
 
@@ -57,6 +60,7 @@ export function parseCliArgs(argv: string[], baseDir: string): CliOptions {
         file: { type: 'string' },
         limit: { type: 'string' },
         'include-publisher': { type: 'string', multiple: true },
+        'configured-publishers': { type: 'boolean', default: false },
         'dry-run': { type: 'boolean', default: false },
         'batch-size': { type: 'string' },
       },
@@ -75,7 +79,10 @@ export function parseCliArgs(argv: string[], baseDir: string): CliOptions {
       values.limit === undefined
         ? undefined
         : nonNegativeInt('--limit', values.limit),
-    includePublishers: values['include-publisher'] ?? [],
+    includePublishers: [
+      ...(values['include-publisher'] ?? []),
+      ...(values['configured-publishers'] ? configuredPublisherNames() : []),
+    ],
     dryRun: values['dry-run'],
     batchSize:
       values['batch-size'] === undefined

@@ -86,14 +86,51 @@ pnpm import:onix -- --file ~/Escritorio/Azeta_Catalogo_ONIX.zip --limit 1000 --i
 
 - `--limit N`: los primeros N productos (en el orden del archivo) de editoriales que no estén en `--include-publisher`.
 - `--include-publisher NOMBRE`: todos los productos de esa editorial (nombre exacto de `PublisherName`, sin distinguir mayúsculas). Se puede repetir. Si se usa sin `--limit`, solo se importan esas editoriales.
+- `--configured-publishers`: añade a `--include-publisher` todas las variantes de nombre de las editoriales configuradas con descuento (`apps/api/src/catalog-import/domain/publisher-discounts.ts`), es decir, las que se venden.
 - Sin `--limit` ni `--include-publisher` se importa el catálogo completo.
 - `--dry-run`: no se conecta a la base de datos. `--batch-size N` cambia el tamaño de lote.
 
 Con `--include-publisher` hay que recorrer el archivo entero (~1,1 millones de productos, alrededor de un minuto); con solo `--limit` la lectura se detiene al alcanzar el límite. Volver a importar es idempotente: actualiza libros y ofertas, reemplaza los colaboradores y nunca sobrescribe el descuento del proveedor, las reglas de precio existentes, el coste neto ni el precio de venta manual.
 
+La marca (`brand`) y el descuento por editorial (`listPriceDiscountPercent`) siguen siempre la configuración versionada: el importador los fija al crear o actualizar cada editorial. Para aplicarlos a las editoriales ya importadas sin reimportar:
+
+```bash
+pnpm catalog:apply-discounts
+```
+
+## Precios y tipo de cambio
+
+El precio al cliente se calcula al leer el catálogo (nunca se guarda): **precio de venta (EUR) = precio de lista sin IVA × (1 + porcentaje de la regla activa / 100)**, o el precio manual (`salePriceOverride`) si existe; luego **ARS = EUR × tipo de cambio**, redondeado a centavos. El porcentaje puede ser negativo (rebaja) o positivo (recargo); con 0 se vende al precio de lista sin IVA. El coste (`netCostAmount`, o lista sin IVA menos el descuento de la editorial o del proveedor) solo sirve para calcular el margen interno y nunca se envía a la web.
+
+Ejemplo: lista 10,00 € sin IVA, Debolsillo 35 %, regla 0 %, cambio 1738 → venta $ 17.380,00; coste $ 11.297,00; margen $ 6.083,00.
+
+Solo se muestran los libros de editoriales con descuento configurado, con una oferta disponible de inmediato (ONIX lista 65: `20` disponible o `21` en stock) y con precio de lista sin IVA (o precio manual). Si no hay tipo de cambio cargado, la API responde 503 (`exchange_rate_missing`) en lugar de mostrar precios en euros.
+
+```bash
+# Tipo de cambio (se guarda el historial; rige el último). Por defecto EUR → ARS.
+pnpm pricing:set-rate -- --rate 1738
+pnpm pricing:set-rate -- --rate 1738.50 --from EUR --to ARS
+
+# Regla de precio activa ('default'). Bases: ADJUSTMENT_ON_LIST_PRICE, MARKUP_ON_COST, MARGIN_ON_PRICE.
+pnpm pricing:set-rule -- --basis ADJUSTMENT_ON_LIST_PRICE --percent 0
+pnpm pricing:set-rule -- --basis ADJUSTMENT_ON_LIST_PRICE --percent -5
+```
+
+Ambos comandos requieren `DATABASE_URL` en `apps/api/.env` e imprimen el valor guardado.
+
+## API del catálogo
+
+Rutas internas (las consume solo el servidor de la web), protegidas con `Authorization: Bearer <API_INTERNAL_TOKEN>`. Si `API_INTERNAL_TOKEN` no está definida, en desarrollo se permite el acceso (con un aviso) y en producción la API responde 503.
+
+- `GET /catalog/books?q=&author=&publisher=&offset=&limit=` → `{ items, total }`, ordenado por título. `q` busca en título, autores, ISBN y editorial; todas las palabras deben aparecer (sin distinguir mayúsculas ni acentos). `limit` por defecto 20, máximo 100.
+- `GET /catalog/books/:isbn` → un libro o 404.
+- `GET /catalog/facets` → `{ publishers }`.
+
+Cada libro trae `priceCents` (entero, centavos de ARS), `currency` (`ARS`) y `priceUpdatedAt` (fecha del feed del proveedor).
+
 ## Front: portal de clientes
 
-Primera pasada del portal para librerías en `apps/web` (Next.js 16, Tailwind CSS v4). **Todo está mockeado**: no hay conexión con la API ni con la base de datos todavía.
+Primera pasada del portal para librerías en `apps/web` (Next.js 16, Tailwind CSS v4). **El catálogo viene de la API** cuando `API_INTERNAL_URL` está definida (en Vercel la inyecta el service binding; en local, `http://localhost:3001`) junto con `API_INTERNAL_TOKEN`; si no, se usan los libros semilla. El resto sigue mockeado. Ver `apps/web/.env.example`.
 
 **Credenciales demo** (se muestran en el login en desarrollo): `demo@lalivre.com` / `lalivre123`.
 
@@ -102,8 +139,8 @@ Pantallas: Login, Dashboard, Libros (buscador + ficha del libro), Pedido (consul
 Qué está mockeado y dónde:
 
 - **Usuarios**: un único usuario demo (`modules/auth/infrastructure/in-memory-user-directory.ts`). La sesión es una cookie httpOnly firmada con HMAC; en producción definir `SESSION_SECRET`.
-- **Catálogo**: ~60 libros semilla en memoria (`modules/catalog/infrastructure/seed-books.ts`).
-- **Pedido**: en memoria del proceso, por cuenta; se reinicia al reiniciar el servidor. Arranca con un pedido de ejemplo.
+- **Catálogo**: API real (`modules/catalog/infrastructure/api-catalog-repository.ts`, revalidación de 60 s) o, sin `API_INTERNAL_URL`, ~60 libros semilla en memoria (`seed-books.ts`). Con datos reales no hay materia, edad recomendada ni promociones y todo está disponible, así que esos filtros, columnas y filas de la ficha se ocultan solos. Los atajos posicionales heredados (TCASA, EANAG) se resuelven como "contiene".
+- **Pedido**: en memoria del proceso, por cuenta; se reinicia al reiniciar el servidor. Arranca con un pedido de ejemplo (vacío cuando se usa la API, porque el ejemplo apunta a libros semilla).
 - **Cuenta** (saldo, actividad, consignaciones, ventas): `modules/account/infrastructure/mock-account-repository.ts`.
 - **Descargas PDF/XLS** y "Notificarme cuando ingrese": solo muestran un aviso.
 - **Importar pedido**: solo `.csv` (sin encabezados; columna A ISBN, columna B cantidad). `.xlsx` queda pendiente.

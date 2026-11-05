@@ -1,3 +1,5 @@
+import { normalizePublisherName } from '../domain/publisher-name.js';
+
 export interface SelectionOptions {
   /**
    * Maximum number of products taken from publishers NOT in
@@ -24,7 +26,7 @@ export class ProductSelection {
     if (limit !== undefined && (!Number.isInteger(limit) || limit < 0)) {
       throw new Error(`Invalid limit: ${limit} (expected an integer >= 0)`);
     }
-    this.included = new Set(includePublishers.map(normalize));
+    this.included = new Set(includePublishers.map(normalizePublisherName));
     this.limit =
       limit ?? (this.included.size > 0 ? 0 : Number.POSITIVE_INFINITY);
   }
@@ -44,11 +46,8 @@ export class ProductSelection {
 
   private isIncluded(publisherName: string | null): boolean {
     return (
-      publisherName !== null && this.included.has(normalize(publisherName))
+      publisherName !== null &&
+      this.included.has(normalizePublisherName(publisherName))
     );
   }
-}
-
-function normalize(name: string): string {
-  return name.trim().toUpperCase();
 }

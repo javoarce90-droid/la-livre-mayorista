@@ -45,6 +45,13 @@ model Publisher {
   code       String @db.VarChar(32)
   name       String
 
+  /// Display and grouping name shared by the feed name variants of one
+  /// publisher brand, e.g. "Paidós".
+  brand                    String?  @db.VarChar(64)
+  /// Distributor discount on the list price excluding tax for this publisher.
+  /// Overrides the supplier default. A publisher with null is NOT sold.
+  listPriceDiscountPercent Decimal? @db.Decimal(5, 2)
+
   supplier Supplier @relation(fields: [supplierId], references: [id])
   books    Book[]
 
@@ -152,6 +159,10 @@ model SupplierOffer {
 // ---------------------------------------------------------------------------
 
 enum PricingBasis {
+  /// sale = list price excluding tax × (1 + percent / 100). The percent may be
+  /// negative (a reduction, above -100) or positive (a surcharge); 0 sells at
+  /// the list price. The cost is not involved: margin = sale − cost.
+  ADJUSTMENT_ON_LIST_PRICE
   /// sale = cost × (1 + percent / 100)
   MARKUP_ON_COST
   /// sale = cost / (1 - percent / 100)
@@ -169,4 +180,20 @@ model PricingRule {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// Exchange rate set by hand by the owner: units of `quoteCurrency` per one
+/// unit of `baseCurrency` (e.g. EUR → ARS). Rows are never updated: a new row
+/// is appended, and the latest one with `effectiveFrom` ≤ now applies.
+model ExchangeRate {
+  id            Int      @id @default(autoincrement())
+  /// ISO 4217, e.g. "EUR".
+  baseCurrency  String   @db.Char(3)
+  /// ISO 4217, e.g. "ARS".
+  quoteCurrency String   @db.Char(3)
+  rate          Decimal  @db.Decimal(14, 4)
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([baseCurrency, quoteCurrency, effectiveFrom(sort: Desc)])
 }
