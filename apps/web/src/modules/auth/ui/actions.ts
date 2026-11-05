@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { container } from "@/composition";
+import { HOME_PATH } from "@/modules/account/domain/portal-sections";
 import { login } from "../application/login";
 import { endSession, startSession } from "../infrastructure/cookie-session";
 import { loginErrorMessage } from "./messages";
@@ -13,7 +14,7 @@ export interface LoginFormState {
 
 function safeNext(value: FormDataEntryValue | null): string {
   const next = typeof value === "string" ? value : "";
-  return next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+  return next.startsWith("/") && !next.startsWith("//") ? next : HOME_PATH;
 }
 
 export async function loginAction(_previous: LoginFormState, formData: FormData): Promise<LoginFormState> {

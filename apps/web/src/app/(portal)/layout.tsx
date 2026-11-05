@@ -1,5 +1,5 @@
 import { container } from "@/composition";
-import { visiblePortalSections } from "@/modules/account/domain/portal-sections";
+import { PORTAL_SECTIONS } from "@/modules/account/domain/portal-sections";
 import { PortalShell } from "@/modules/account/ui/PortalShell";
 import { requirePortalContext } from "@/portal-context";
 import { ToastProvider } from "@/shared/ui/Toast";
@@ -10,7 +10,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/">) {
   return (
     <ToastProvider>
       <PortalShell
-        sections={visiblePortalSections(account.flags)}
+        sections={PORTAL_SECTIONS}
         user={{ name: user.name, email: user.email }}
         bookstore={{ name: account.bookstoreName, branch: account.branch }}
         unreadNotifications={unread}

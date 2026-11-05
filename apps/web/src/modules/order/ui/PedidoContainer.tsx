@@ -295,7 +295,7 @@ export function PedidoContainer({ account, order, books: initialBooks }: PedidoC
               Empezar un pedido nuevo
             </Link>
             <Link href="/dashboard" className={buttonClasses("secondary", "lg")}>
-              Ir al inicio
+              Ver el dashboard
             </Link>
           </div>
         </section>
