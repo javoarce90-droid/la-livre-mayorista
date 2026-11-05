@@ -4,44 +4,30 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3,
   Bell,
   BookOpen,
-  Library,
   LayoutDashboard,
-  Mail,
   Menu,
-  PackagePlus,
   PanelLeftClose,
   PanelLeftOpen,
-  Percent,
   ShoppingCart,
-  Sparkles,
-  Star,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { Logo } from "@/shared/ui/brand/Logo";
 import { cx } from "@/shared/ui/cx";
 import { IconButton } from "@/shared/ui/IconButton";
-import type { PortalSection, PortalSectionKey } from "../domain/portal-sections";
+import { HOME_PATH, type PortalSection, type PortalSectionKey } from "../domain/portal-sections";
 import { AccountMenu } from "./AccountMenu";
 
 const ICONS: Record<PortalSectionKey, LucideIcon> = {
   dashboard: LayoutDashboard,
   libros: BookOpen,
   pedido: ShoppingCart,
-  "ingresos-recientes": PackagePlus,
-  novedades: Star,
-  promociones: Percent,
-  catalogos: Library,
-  estadisticas: BarChart3,
-  recomendador: Sparkles,
-  mensajeria: Mail,
 };
 
 export interface PortalShellProps {
-  sections: PortalSection[];
+  sections: readonly PortalSection[];
   user: { name: string; email: string };
   bookstore: { name: string; branch: string };
   unreadNotifications: number;
@@ -58,7 +44,7 @@ function SidebarContent({
   return (
     <>
       <div className={cx("flex h-16 items-center border-b border-white/10", collapsed ? "justify-center px-2" : "px-5")}>
-        <Link href="/dashboard" onClick={onNavigate} aria-label="Ir al Dashboard">
+        <Link href={HOME_PATH} onClick={onNavigate} aria-label="Ir a Libros">
           <Logo inverse compact={collapsed} />
         </Link>
       </div>
@@ -98,11 +84,6 @@ function SidebarContent({
                   ) : (
                     <span className="flex-1 truncate">{section.label}</span>
                   )}
-                  {section.badge && !collapsed ? (
-                    <span className="rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
-                      {section.badge}
-                    </span>
-                  ) : null}
                 </Link>
               </li>
             );

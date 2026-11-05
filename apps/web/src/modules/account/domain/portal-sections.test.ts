@@ -1,29 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { visiblePortalSections } from "./portal-sections";
+import { HOME_PATH, PORTAL_SECTIONS } from "./portal-sections";
 
-const flags = { hasConsignment: true, hasPromotions: true, suspended: false, orderLocked: false };
-
-describe("visiblePortalSections", () => {
-  it("lists every section in menu order", () => {
-    expect(visiblePortalSections(flags).map((s) => s.label)).toEqual([
-      "Dashboard",
-      "Libros",
-      "Pedido",
-      "Ingresos Recientes",
-      "Novedades",
-      "Promociones",
-      "Catálogos",
-      "Estadísticas",
-      "Recomendador",
-      "Mensajería",
-    ]);
+describe("PORTAL_SECTIONS", () => {
+  it("lists only the built sections in menu order", () => {
+    expect(PORTAL_SECTIONS.map((s) => s.label)).toEqual(["Dashboard", "Libros", "Pedido"]);
   });
 
-  it("hides Promociones when the account has no promotions", () => {
-    expect(visiblePortalSections({ ...flags, hasPromotions: false }).map((s) => s.key)).not.toContain("promociones");
-  });
-
-  it("marks the recommender with the IA badge", () => {
-    expect(visiblePortalSections(flags).find((s) => s.key === "recomendador")?.badge).toBe("IA");
+  it("uses the catalog as the portal home", () => {
+    expect(HOME_PATH).toBe("/libros");
+    expect(PORTAL_SECTIONS.find((s) => s.key === "libros")?.href).toBe(HOME_PATH);
   });
 });
