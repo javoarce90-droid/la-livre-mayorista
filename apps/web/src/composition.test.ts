@@ -48,8 +48,9 @@ describe("createAccountResolver", () => {
     );
   });
 
-  it("requires API_INTERNAL_URL with Supabase Auth", () => {
-    expect(() => createAccountResolver(SUPABASE, accounts)).toThrow(/API_INTERNAL_URL/);
+  it("fails on use, not on creation, without API_INTERNAL_URL (the build has no service binding)", async () => {
+    const resolver = createAccountResolver(SUPABASE, accounts);
+    await expect(resolver.resolve({ id: "u1", email: "a@b.c" } as never)).rejects.toThrow(/API_INTERNAL_URL/);
   });
 
   it("uses the mock account with the in-memory auth", () => {

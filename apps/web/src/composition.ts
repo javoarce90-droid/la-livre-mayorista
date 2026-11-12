@@ -71,7 +71,13 @@ export function createAuthGateway(env: Partial<Record<string, string>>): AuthGat
 export function createAccountResolver(env: Partial<Record<string, string>>, accounts: AccountRepository): AccountResolver {
   if (!readSupabaseConfig(env)) return new MockAccountResolver(accounts);
   const baseUrl = apiUrl(env);
-  if (!baseUrl) throw new Error("API_INTERNAL_URL is required when Supabase Auth is enabled (NEXT_PUBLIC_SUPABASE_*).");
+  // Fail on use, not on creation: `next build` evaluates the container without the service binding.
+  if (!baseUrl) {
+    return {
+      resolve: () =>
+        Promise.reject(new Error("API_INTERNAL_URL is required when Supabase Auth is enabled (NEXT_PUBLIC_SUPABASE_*).")),
+    };
+  }
   return new ApiAccountResolver({ baseUrl, token: env.API_INTERNAL_TOKEN });
 }
 
