@@ -22,6 +22,10 @@
     "import:onix": "pnpm --filter @la-livre/api import:onix",
     "catalog:apply-discounts": "pnpm --filter @la-livre/api catalog:apply-discounts",
     "pricing:set-rate": "pnpm --filter @la-livre/api pricing:set-rate",
-    "pricing:set-rule": "pnpm --filter @la-livre/api pricing:set-rule"
+    "pricing:set-rule": "pnpm --filter @la-livre/api pricing:set-rule",
+    "customers:invite": "pnpm --filter @la-livre/api customers:invite",
+    "customers:suspend": "pnpm --filter @la-livre/api customers:suspend",
+    "customers:activate": "pnpm --filter @la-livre/api customers:activate",
+    "customers:list": "pnpm --filter @la-livre/api customers:list"
   }
 }

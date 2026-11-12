@@ -308,10 +308,10 @@ export function PedidoContainer({ account, order, books: initialBooks }: PedidoC
           <header className="flex flex-wrap items-start justify-between gap-2 border-b border-line px-4 py-3 sm:px-5">
             <div className="min-w-0">
               <h2 className="font-semibold text-ink">
-                {account.bookstoreName} — {account.branch}
+                {[account.bookstoreName, account.branch].filter(Boolean).join(" — ")}
               </h2>
               <p className="text-xs text-ink-muted">
-                {account.deposit} · Rubro: {account.rubro} · {account.email}
+                {[account.deposit, account.rubro && `Rubro: ${account.rubro}`, account.email].filter(Boolean).join(" · ")}
               </p>
             </div>
             <p className="text-xs text-ink-muted">

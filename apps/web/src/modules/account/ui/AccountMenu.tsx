@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { KeyRound, LogOut } from "lucide-react";
+import { SET_PASSWORD_PATH } from "@/modules/auth/domain/auth-paths";
 import { logoutAction } from "@/modules/auth/ui/actions";
 
 function initials(name: string): string {
@@ -50,6 +52,14 @@ export function AccountMenu({ name, email }: { name: string; email: string }) {
             <p className="truncate text-xs text-ink-muted">{email}</p>
           </div>
           <div className="my-1 border-t border-line" />
+          <Link
+            href={SET_PASSWORD_PATH}
+            role="menuitem"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink hover:bg-subtle"
+          >
+            <KeyRound aria-hidden className="size-4" />
+            Cambiar contraseña
+          </Link>
           <form action={logoutAction}>
             <button
               type="submit"

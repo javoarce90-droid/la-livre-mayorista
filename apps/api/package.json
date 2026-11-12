@@ -7,7 +7,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "nest start --watch",
-    "build": "prisma generate && nest build",
+    "build": "prisma generate && nest build && node scripts/mark-dist-esm.mjs",
     "start": "node dist/main",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "lint": "oxlint --type-aware src/ test/",
@@ -23,7 +23,11 @@
     "import:onix": "nest build && node dist/catalog-import/cli/main.js",
     "catalog:apply-discounts": "nest build && node dist/catalog-import/cli/apply-publisher-discounts.js",
     "pricing:set-rate": "nest build && node dist/pricing/cli/set-exchange-rate.js",
-    "pricing:set-rule": "nest build && node dist/pricing/cli/set-pricing-rule.js"
+    "pricing:set-rule": "nest build && node dist/pricing/cli/set-pricing-rule.js",
+    "customers:invite": "nest build && node dist/customers/cli/invite-customer.js",
+    "customers:suspend": "nest build && node dist/customers/cli/suspend-customer.js",
+    "customers:activate": "nest build && node dist/customers/cli/activate-customer.js",
+    "customers:list": "nest build && node dist/customers/cli/list-customers.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -32,6 +36,8 @@
     "@nestjs/platform-express": "^12.0.1",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "@supabase/supabase-js": "2.118.0",
+    "jose": "6.2.13",
     "pg": "^8",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

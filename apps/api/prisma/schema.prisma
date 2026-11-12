@@ -197,3 +197,34 @@ model ExchangeRate {
 
   @@index([baseCurrency, quoteCurrency, effectiveFrom(sort: Desc)])
 }
+
+// ---------------------------------------------------------------------------
+// Customers
+//
+// Sign-in is handled by Supabase Auth. A Customer is created by La Livre staff
+// (invite-only) and linked to its Supabase user through `authUserId`.
+// ---------------------------------------------------------------------------
+
+enum CustomerStatus {
+  ACTIVE
+  /// Can still sign in but cannot order.
+  SUSPENDED
+}
+
+/// A bookstore that buys from La Livre.
+model Customer {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Supabase auth.users id. Null until the invitation reaches Supabase, so a
+  /// failed invitation can be retried without losing the customer.
+  authUserId   String?        @unique @db.Uuid
+  /// Always lowercase and trimmed (normalized in application code).
+  email        String         @unique @db.VarChar(254)
+  businessName String         @db.VarChar(200)
+  /// CUIT: 11 digits without separators, check digit validated in code.
+  taxId        String?        @db.Char(11)
+  phone        String?        @db.VarChar(32)
+  status       CustomerStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -118,6 +118,47 @@ pnpm pricing:set-rule -- --basis ADJUSTMENT_ON_LIST_PRICE --percent -5
 
 Ambos comandos requieren `DATABASE_URL` en `apps/api/.env` e imprimen el valor guardado.
 
+## Alta de clientes
+
+El portal es **solo por invitación**: únicamente pueden ingresar los clientes que da de alta La Livre (no hay registro público). Por ahora el alta la hace el equipo con la línea de comandos; la lógica vive en `apps/api/src/customers/application/customer-use-cases.ts` para reutilizarla en una futura pantalla de administración.
+
+```bash
+# Crea el cliente y le envía por email la invitación para elegir su contraseña.
+# Si ya existía y todavía no aceptó, reenvía la invitación (sin cambiar sus datos).
+pnpm customers:invite -- --email compras@libreria.com --name "Librería del Puerto" --tax-id 20-12345678-6 --phone "+54 11 5555-5555"
+
+# Suspender: puede ingresar, pero no puede hacer pedidos. Reactivar.
+pnpm customers:suspend -- --email compras@libreria.com
+pnpm customers:activate -- --email compras@libreria.com
+
+# Listado: estado, invitación (linked = vinculado a su usuario de Supabase / pending), email, razón social, CUIT, teléfono.
+pnpm customers:list
+```
+
+- `--tax-id` (CUIT) es opcional; se aceptan guiones y se valida el dígito verificador. El email se guarda en minúsculas.
+- Requieren en `apps/api/.env`: `DATABASE_URL`, y para invitar además `SUPABASE_URL`, `SUPABASE_SECRET_KEY` (clave **secreta** `sb_secret_…`, nunca en la web) y `WEB_ORIGIN` (el link de la invitación apunta a `${WEB_ORIGIN}/auth/confirm?next=/cuenta/clave`).
+- El cliente se guarda antes de invitar: si el envío falla (por ejemplo, por el límite de emails), alcanza con volver a correr el mismo comando.
+- Si el email ya tiene contraseña en Supabase no se envía nada: el cliente puede ingresar o usar «¿Olvidaste tu contraseña?».
+
+## Autenticación (Supabase Auth)
+
+La web usa Supabase Auth (`@supabase/ssr`, sesión en cookies) cuando `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` están definidas en `apps/web`; si no, sigue funcionando el usuario demo en memoria (tests y desarrollo offline). Con Supabase, la cuenta del portal sale de la API `GET /me` (requiere `API_INTERNAL_URL`): la web envía el token interno y, en `X-Customer-Token`, el access token del usuario, que la API verifica con las claves públicas del proyecto (JWKS). Un usuario de Supabase sin cliente en La Livre es desconectado y ve «Tu usuario no tiene una cuenta habilitada. Escribinos a La Livre.».
+
+Flujo: invitación por email → `/auth/confirm` → `/cuenta/clave` (elige su contraseña) → portal. Recuperación: «¿Olvidaste tu contraseña?» (`/login/olvide`, siempre responde lo mismo para no revelar qué emails existen) → email → `/auth/confirm` → `/cuenta/clave`.
+
+**Configuración pendiente en el dashboard de Supabase** (proyecto `kgykaxaygbrhdtexlmnr`):
+
+1. **Authentication → Sign In / Providers → Email**: desactivar **Allow new users to sign up** (solo invitación). Dejar habilitado el proveedor Email.
+2. **Project Settings → JWT Keys**: el proyecto tiene que usar **claves de firma asimétricas** (ES256, el valor por defecto en proyectos nuevos). Con el secreto JWT heredado el JWKS viene vacío y la API rechaza todos los tokens.
+3. **Authentication → URL Configuration**: *Site URL* = dominio de producción (por ejemplo `https://portal.lalivre.com.ar`). *Redirect URLs*: `http://localhost:3000/auth/confirm` y `https://<dominio-de-producción>/auth/confirm` (o `/**`).
+4. **Authentication → Emails → Templates**, cambiar el enlace para que use `token_hash` (como recomienda la guía de SSR) en lugar de `{{ .ConfirmationURL }}`:
+   - *Invite user*: `<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/cuenta/clave">Aceptar invitación</a>`
+   - *Reset password*: `<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/cuenta/clave">Elegir una contraseña nueva</a>`
+   - Traducir asunto y texto al español. `{{ .SiteURL }}` sale de la *Site URL*: para probar en local con estas plantillas, la Site URL tiene que ser `http://localhost:3000` (o usar un proyecto de desarrollo).
+5. **SMTP**: el servidor de email incluido tiene un límite muy bajo de envíos por hora y es solo para pruebas. Para producción configurar un **SMTP propio** (Authentication → Emails → SMTP Settings).
+6. Copiar *Project URL* y la clave **publishable** a `apps/web` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`), y *Project URL* + clave **secret** a `apps/api` (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`).
+7. Aplicar la migración `20261105140000_customers` (`pnpm db:deploy`).
+
 ## API del catálogo
 
 Rutas internas (las consume solo el servidor de la web), protegidas con `Authorization: Bearer <API_INTERNAL_TOKEN>`. Si `API_INTERNAL_TOKEN` no está definida, en desarrollo se permite el acceso (con un aviso) y en producción la API responde 503.
@@ -125,6 +166,8 @@ Rutas internas (las consume solo el servidor de la web), protegidas con `Authori
 - `GET /catalog/books?q=&author=&publisher=&offset=&limit=` → `{ items, total }`, ordenado por título. `q` busca en título, autores, ISBN y editorial; todas las palabras deben aparecer (sin distinguir mayúsculas ni acentos). `limit` por defecto 20, máximo 100.
 - `GET /catalog/books/:isbn` → un libro o 404.
 - `GET /catalog/facets` → `{ publishers }`.
+
+- `GET /me` → el cliente del usuario que inició sesión: `{ id, email, businessName, taxId, phone, status }` (`ACTIVE` | `SUSPENDED`). Además del token interno requiere `X-Customer-Token: <access token de Supabase>` (verificado con el JWKS de `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`, emisor `${SUPABASE_URL}/auth/v1`, audiencia `authenticated`). 401 `invalid_customer_token` si falta o no es válido; 403 `customer_not_found` si el usuario no es cliente de La Livre.
 
 Cada libro trae `priceCents` (entero, centavos de ARS), `currency` (`ARS`) y `priceUpdatedAt` (fecha del feed del proveedor).
 
@@ -138,10 +181,10 @@ Pantallas: Login, Dashboard, Libros (buscador + ficha del libro), Pedido (consul
 
 Qué está mockeado y dónde:
 
-- **Usuarios**: un único usuario demo (`modules/auth/infrastructure/in-memory-user-directory.ts`). La sesión es una cookie httpOnly firmada con HMAC; en producción definir `SESSION_SECRET`.
+- **Usuarios**: Supabase Auth cuando está configurado (ver «Autenticación»). Sin Supabase, un único usuario demo (`modules/auth/infrastructure/in-memory-user-directory.ts`) con una cookie httpOnly firmada con HMAC (`SESSION_SECRET`).
 - **Catálogo**: API real (`modules/catalog/infrastructure/api-catalog-repository.ts`, revalidación de 60 s) o, sin `API_INTERNAL_URL`, ~60 libros semilla en memoria (`seed-books.ts`). Con datos reales no hay materia, edad recomendada ni promociones y todo está disponible, así que esos filtros, columnas y filas de la ficha se ocultan solos. Los atajos posicionales heredados (TCASA, EANAG) se resuelven como "contiene".
 - **Pedido**: en memoria del proceso, por cuenta; se reinicia al reiniciar el servidor. Arranca con un pedido de ejemplo (vacío cuando se usa la API, porque el ejemplo apunta a libros semilla).
-- **Cuenta** (saldo, actividad, consignaciones, ventas): `modules/account/infrastructure/mock-account-repository.ts`.
+- **Cuenta**: con Supabase, razón social, email y suspensión vienen de la API (`GET /me`); sucursal, depósito, rubro, zona (Interior), descuento (0 %), consignación, promociones y bloqueo de pedido todavía no tienen fuente y usan valores neutros. Saldo, actividad, consignaciones, ventas y notificaciones siguen mockeados (`modules/account/infrastructure/mock-account-repository.ts`).
 - **Descargas PDF/XLS** y "Notificarme cuando ingrese": solo muestran un aviso.
 - **Importar pedido**: solo `.csv` (sin encabezados; columna A ISBN, columna B cantidad). `.xlsx` queda pendiente.
 
@@ -161,5 +204,5 @@ Arquitectura: `src/modules/{auth,catalog,order,account}/{domain,application,infr
 
 - Modelo de catálogo y datos (`schema.prisma` aún no tiene modelos).
 - Precios y margen del 20 %.
-- Autenticación real, checkout y panel de administración (el portal usa auth y pedido mock, ver arriba).
+- Checkout y panel de administración (el alta de clientes es por línea de comandos; el pedido sigue en memoria).
 - Despliegues (AWS u otros).
