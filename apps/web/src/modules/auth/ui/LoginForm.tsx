@@ -1,17 +1,17 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { useActionState } from "react";
+import Link from "next/link";
 import { Button } from "@/shared/ui/Button";
 import { Input, Label } from "@/shared/ui/Input";
 import { Notice } from "@/shared/ui/Notice";
+import { FORGOT_PASSWORD_PATH } from "../domain/auth-paths";
 import { loginAction, type LoginFormState } from "./actions";
+import { AUTH_LINK_CLASSES } from "./AuthLayout";
+import { PasswordInput } from "./PasswordInput";
 
-const INITIAL: LoginFormState = { error: null, email: "" };
-
-export function LoginForm({ next }: { next?: string }) {
-  const [state, formAction, pending] = useActionState(loginAction, INITIAL);
-  const [showPassword, setShowPassword] = useState(false);
+export function LoginForm({ next, notice }: { next?: string; notice?: string }) {
+  const [state, formAction, pending] = useActionState(loginAction, { error: notice ?? null, email: "" } satisfies LoginFormState);
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
@@ -23,29 +23,16 @@ export function LoginForm({ next }: { next?: string }) {
       </div>
       <div>
         <Label htmlFor="password">Contraseña</Label>
-        <div className="relative">
-          <Input
-            id="password"
-            name="password"
-            type={showPassword ? "text" : "password"}
-            autoComplete="current-password"
-            required
-            className="pr-11"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword((value) => !value)}
-            aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-            aria-pressed={showPassword}
-            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-ink-muted hover:text-ink"
-          >
-            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-          </button>
-        </div>
+        <PasswordInput id="password" name="password" autoComplete="current-password" required />
       </div>
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Ingresando…" : "Ingresar"}
       </Button>
+      <p className="text-center">
+        <Link href={FORGOT_PASSWORD_PATH} className={AUTH_LINK_CLASSES}>
+          ¿Olvidaste tu contraseña?
+        </Link>
+      </p>
     </form>
   );
 }

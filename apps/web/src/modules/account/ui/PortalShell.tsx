@@ -50,13 +50,13 @@ function SidebarContent({
       </div>
       <div className={cx("border-b border-white/10 py-4", collapsed ? "px-2 text-center" : "px-5")}>
         {collapsed ? (
-          <span title={`${bookstore.name} — ${bookstore.branch}`} className="inline-flex size-9 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white">
+          <span title={[bookstore.name, bookstore.branch].filter(Boolean).join(" — ")} className="inline-flex size-9 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white">
             {bookstore.name.slice(0, 1)}
           </span>
         ) : (
           <>
             <p className="truncate text-sm font-medium text-white">{bookstore.name}</p>
-            <p className="truncate text-xs text-white/60">{bookstore.branch}</p>
+            {bookstore.branch ? <p className="truncate text-xs text-white/60">{bookstore.branch}</p> : null}
           </>
         )}
       </div>

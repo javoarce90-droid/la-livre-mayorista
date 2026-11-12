@@ -25,7 +25,7 @@ export function DashboardScreen({ overview, order, now }: DashboardScreenProps) 
 
   return (
     <>
-      <PageHeader title="Dashboard" description={`${account.bookstoreName} — ${account.branch}`} />
+      <PageHeader title="Dashboard" description={[account.bookstoreName, account.branch].filter(Boolean).join(" — ")} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader
